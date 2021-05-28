@@ -277,55 +277,76 @@ fn main() {
       .author("Hugh Rundle <hugh@hughrundle.net>")
       .about("Publish and manage gemini sites from the web")
       .arg(Arg::with_name("install")
-          .short("i")
-          .long("install")
+          .short("b")
+          .long("build")
           .help("Set up a default user and web components")
           .takes_value(false)
-          .conflicts_with_all(&["add-user", "remove-user", "show-user", "statistics"]))
-      .arg(Arg::with_name("add-user")
-          .short("a")
-          .long("add-user")
+          .conflicts_with_all(&["capsule", "delete", "user", "statistics"]))
+      .arg(Arg::with_name("capsule")
+          .short("c")
+          .long("capsule")
           .help("Add a user with EMAIL address, whose gemini site will be saved to SUBDIRECTORY")
           .value_names(&["EMAIL", "SUBDIRECTORY"])
           .takes_value(true)
-          .conflicts_with_all(&["install", "remove-user", "show-user", "statistics"]))
-      .arg(Arg::with_name("remove-user")
-          .short("r")
-          .long("remove-user")
+          .conflicts_with_all(&["install", "delete", "user", "statistics"]))
+      .arg(Arg::with_name("delete")
+          .short("d")
+          .long("delete")
           .help("Remove a user and their files by providing their EMAIL address and the SUBDIRECTORY their files are saved to")
           .value_names(&["EMAIL", "SUBDIRECTORY"])
           .takes_value(true)
-          .conflicts_with_all(&["install", "add-user", "show-user", "statistics"]))
-      .arg(Arg::with_name("show-user")
+          .conflicts_with_all(&["install", "capsule", "user", "statistics"]))
+      .arg(Arg::with_name("user")
           .short("u")
-          .long("show-user")
+          .long("user")
           .help("Display details for a particular user with EMAIL address")
           .value_name("EMAIL")
           .takes_value(true)
-          .conflicts_with_all(&["install", "remove-user", "add-user", "statistics"]))
+          .conflicts_with_all(&["install", "delete", "capsule", "statistics"]))
+          .arg(Arg::with_name("login")
+          .short("l")
+          .long("login")
+          .help("Send login email")
+          .takes_value(false)
+          .requires("user")
+          .conflicts_with_all(&["confirm", "install", "delete", "capsule", "statistics"]))
+          .arg(Arg::with_name("confirm")
+          .short("n")
+          .long("confirm")
+          .help("Send confirmation email")
+          .takes_value(false)
+          .requires("user")
+          .conflicts_with_all(&["login", "install", "delete", "capsule", "statistics"]))
       .arg(Arg::with_name("statistics")
           .short("s")
           .long("statistics")
           .help("Display statistics about this trebuchet installation")
           .takes_value(false)
-          .conflicts_with_all(&["install", "remove-user", "show-user", "add-user"]))
+          .conflicts_with_all(&["install", "capsule", "user", "capsule"]))
       .get_matches();
 
+  // it's ok to use unwrap here because clap ensures there will be values present
   if matches.is_present("install") {
     println!("I am installing!")
   }
-  if matches.is_present("add-user") {
+  if matches.is_present("capsule") {
     println!("I am adding a user!");
-    // it's ok to use unwrap here because clap ensures there will be values present
-    let args = matches.values_of("add-user").unwrap();
+    let args = matches.values_of("capsule").unwrap();
     // TESTING
     add_user(args)
   }
-  if matches.is_present("remove-user") {
+  if matches.is_present("delete") {
     println!("I am removing a user!")
   }
-  if matches.is_present("show-user") {
-    println!("I am printing user details!")
+  if matches.is_present("user") {
+    if matches.is_present("confirm") {
+      println!("I am confirming user details!")
+    } else if matches.is_present("login") {
+      println!("I am sending a user login link!");
+      build_user(matches.value_of("user").unwrap(), "").send_email(EmailType::LogIn)
+    } else {
+      println!("I am printing user details!")
+    }
   }
   if matches.is_present("statistics") {
     println!("I am printing statistics!")
