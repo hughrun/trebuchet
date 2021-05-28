@@ -47,19 +47,19 @@ This command will install, in the directory from where you ran the command:
 
 Trebuchet provides four commands for administrators.
 
-### `capsule`
+### `capsule EMAIL NAME`
 
 `trebuchet capsule` takes two arguments: `EMAIL`, and `NAME`, where the first is the user's email address, and the second is the name that will be used as the root directory for this capsule.
 
 A new capsule directory will be created, and the user will be sent an email with a confirmation link which must be used before they can publish.
 
-### `delete`
+### `delete EMAIL NAME`
 
 `trebuchet delete` takes two arguments: `EMAIL`, and `NAME`, where the first is the user's email address, and the second is the name of the root directory for the capsule.
 
 If the email address and name match, an interactive prompt will ask for confirmation. On confirmation, the capsule files and related database entries will be deleted. This is a non-recoverable action!
 
-### `user`
+### `user EMAIL [--confirm | --login]`
 
 `trebuchet user` takes one argument: `EMAIL`, which is the email address of the user.
 
