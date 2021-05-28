@@ -82,18 +82,18 @@ Your web server should serve files from the `web` directory.
 
 For the Gemini server, you have more options. Trebuchet will build capsules using the following file structure:
 ```
-root_directory
-  - username
+root_directory/
+  - username/
     - index.gmi
-    - page-name
-    - index.gmi
-    - YYYY-MM-DD
-      - name-of-post
+    - page-name/
+      - index.gmi
+    - YYYY-MM-DD/
+      - name-of-post/
         - index.gmi
-      - name-of-second-post-same-day
+      - name-of-second-post-same-day/
         - index.gmi
-    - YYYY-MM-DD
-      - name-of-another-post-different-day
+    - YYYY-MM-DD/
+      - name-of-another-post-different-day/
         - index.gmi
 ```
 How these capsules are actually served is up to the server administrator. The two most obvious options are to either
@@ -121,7 +121,7 @@ Posts will have a URL of `/{YYYY-MM-DD}/{hyphenated-title}` whereas pages are fo
 
 Both _posts_ and _pages_ can be assigned _tags_, which perform the same function as in typical blogging or CMS software&mdash;small pieces of metadata to describe the topic or purpose of the document. Trebuchet automatically builds index pages for all _posts_ and all _tags_, using the convention described in [Subscribing to Gemini pages](https://gemini.circumlunar.space/docs/companion/subscription.gmi). This allows Geminauts to subscribe to a whole capsule and/or certain tags.
 
-An index page listing all posts is saved as `archive.gmi`. Index pages for each tag are saved as `tagged-tagname.gmi`, and list every post that uses that tag. Since posts can have multiple tags and every post appears at `archive.gmi`, a single post will appear on multiple index pages.
+An index page listing all posts is saved as `{capsule}/archive/index.gmi`. Index pages for each tag are saved as `{capsule}/tagged-{tagname}/index.gmi`, and list every post that uses that tag. Since posts can have multiple tags and every post appears at `{capsule}/archive/index.gmi`, a single post will appear on multiple index pages.
 
 ### Includes
 
