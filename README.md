@@ -107,13 +107,13 @@ How you set up your server will depend on why you are using Trebuchet and what y
 
 Unlike server administration, but like the Gemini protocol itself, Trebuchet is highly opinionated about how authors can publish capsules. It provides some flexibility where useful, but does not provide users with a large and confusing range of configuration options. There are, after all, only so many ways one can publish a Gemini capsule.
 
-Authors log in at `https://example.com/` by entering their email address, and then clicking on the one-time link that will be sent to them at that address. Trebuchet utilised single-use tokens rather than storing passwords. Cookies to enable authenticated sessions are relatively short-lived, though drafts are saved locally to avoid data loss.
+Authors log in at `https://example.com/` by entering their email address, and then clicking on the one-time link that will be sent to them at that address. Trebuchet uses single-use tokens rather than storing passwords. Cookies to enable authenticated sessions are relatively short-lived, though drafts are saved locally to avoid data loss.
 
 Once logged in, authors can either draft a new document (post/page), or edit an existing one, within the web interface. It is not possible to create new users or capsules from the web interface, nor to delete them from the web interface&mdash;this is deliberate to reduce both the possible attack surface and the complexity required by the application.
 
 ### Posts and pages
 
-All files are either a _post_ (default) or _page_. Posts included in Gemini subscription lists (see _tags and content lists_, and _includes codes_ below), whereas pages are not. 
+All files are either a _post_ (default) or _page_. Posts included in Gemini subscription lists (see [tags and content lists](#tags-and-content-lists), and [includes](#includes) below), whereas pages are not. 
 
 Posts will have a URL of `/{YYYY-MM-DD}/{hyphenated-title}` whereas pages are found at `/{hyphenated-title}`
 
