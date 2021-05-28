@@ -1,4 +1,4 @@
-# Trebuchet: web to gemini publishing
+# Trebuchet: Web to Gemini publishing
 
 Trebuchet is a web application for publishing [gemini](https://gemini.circumlunar.space/) capsules.
 
@@ -105,25 +105,29 @@ How you set up your server will depend on why you are using Trebuchet and what y
 
 ## Publishing with Trebuchet
 
-Like the Gemini protocol itself, Trebuchet is highly opionated. It provides some flexibility where useful, but does not provide users with a large and confusing range of configuration options. There are, after all, only so many ways one can publish a Gemini capsule.
+Unlike server administration, but like the Gemini protocol itself, Trebuchet is highly opinionated about how authors can publish capsules. It provides some flexibility where useful, but does not provide users with a large and confusing range of configuration options. There are, after all, only so many ways one can publish a Gemini capsule.
 
-### posts and pages
+Authors log in at `https://example.com/` by entering their email address, and then clicking on the one-time link that will be sent to them at that address. Trebuchet utilised single-use tokens rather than storing passwords. Cookies to enable authenticated sessions are relatively short-lived, though drafts are saved locally to avoid data loss.
+
+Once logged in, authors can either draft a new document (post/page), or edit an existing one, within the web interface. It is not possible to create new users or capsules from the web interface, nor to delete them from the web interface&mdash;this is deliberate to reduce both the possible attack surface and the complexity required by the application.
+
+### Posts and pages
 
 All files are either a _post_ (default) or _page_. Posts included in Gemini subscription lists (see _tags and content lists_, and _includes codes_ below), whereas pages are not. 
 
 Posts will have a URL of `/{YYYY-MM-DD}/{hyphenated-title}` whereas pages are found at `/{hyphenated-title}`
 
-### tags and content lists
+### Tags and content lists
 
 Both _posts_ and _pages_ can be assigned _tags_, which perform the same function as in typical blogging or CMS software&mdash;small pieces of metadata to describe the topic or purpose of the document. Trebuchet automatically builds index pages for all _posts_ and all _tags_, using the convention described in [Subscribing to Gemini pages](https://gemini.circumlunar.space/docs/companion/subscription.gmi). This allows Geminauts to subscribe to a whole capsule and/or certain tags.
 
 An index page listing all posts is saved as `archive.gmi`. Index pages for each tag are saved as `tagged-tagname.gmi`, and list every post that uses that tag. Since posts can have multiple tags and every post appears at `archive.gmi`, a single post will appear on multiple index pages.
 
-### includes
+### Includes
 
 If you have used a static capsule generator or templating system before you will be familiar with the concept of "includes". These are basically files that are added to a page prior to rendering, generally indicated by using a "shortcode" or metadata tag in the page template. Trebuchet currently has only three _include codes_, using the "handlebars" style, as well as an automatically included _header_ and _footer_.
 
-1. headers and footers
+1. Headers and footers
 
 Trebuchet includes a header and a footer on every page and post by default. These are saved for each user in the database (but not as separate files) as `includes.footer` and `includes.header`, and may contain any valid gemtext or include codes. Headers and footers can be excluded for individual posts or pages. To exlude the header and/or footer for all posts and pages, simply leave `includes.header` and/or `includes.footer` blank.
 
@@ -139,7 +143,7 @@ The `{{ tag.tagname }}` code creates a link list of all pages or posts that are 
 
 The default footer includes the `{{ tagsList }}` include code. This will create a linked list of all tags used on the post or page (with each link pointing to the index page). This code can also be used anywhere within the text of a page or post. If you want to display tags lists in the footer for posts but not pages, you need to deselect _show footer_ in each _page_ as there is no logic available for include codes.
 
-### drafts, publishing, and updating
+### Drafts, publishing, and updating
 
 Content can be saved as a _draft_, or published as a _post_ or _page_.
 
@@ -153,3 +157,9 @@ When a file is _published_ as a _post_ or a _page_, the content and metadata is 
 Although it does not serve content dynamically, Trebuchet considers the database to be the "single source of truth". Any files manually edited or added to a capsule directory are therefore liable to be overwritten. Updates should therefore always be made via the web interface.
 
 Posts and pages can be edited/updated after publication. In this case the published date will not change, though a "last edited" date is recorded in the database.
+
+### Limitations
+
+Currently each email address can only have one capsule associated with it. This may change in future.
+
+Trebuchet is a text-only publishing platform and currently there are no plans to enable file uploads (e.g. for storing image files that can be linked to in Gemini pages).
