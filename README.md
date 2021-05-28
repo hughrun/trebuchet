@@ -13,3 +13,7 @@ The [Gemini FAQ](https://gemini.circumlunar.space/docs/faq.gmi) states:
 > Gemini already has a surprising number of client and server implementations in existence - which isn't to say more aren't welcome, but the real shortage right now is not of software but of content. **The more interesting and exciting stuff people find in Geminispace, the more likely they are to want to add content of their own.** So, the greatest contribution you can make to the project is to be a part of this process. 
 
 I realise the irony of responding to this need with more software, however Trebuchet is an attempt to make it easer for more people to provide interesting Gemini content within a similar mental model as publishing to the web using a CMS like WordPress or a web app like Medium.
+
+## Roadmap
+
+_Trebuchet_ is not yet ready for use. See the `v.1.0.0` branch README to see what is planned.
