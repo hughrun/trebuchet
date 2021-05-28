@@ -49,7 +49,7 @@ Trebuchet provides four commands for administrators.
 
 ### `capsule EMAIL NAME`
 
-`trebuchet capsule` takes two arguments: `EMAIL`, and `NAME`, where the first is the user's email address, and the second is the name that will be used as the root directory for this capsule.
+`trebuchet capsule` takes two arguments: `EMAIL`, and `NAME`, where the first is the user's email address, and the second is the name that will be used as the root directory for this capsule. `NAME` must be ASCII alphanumeric.
 
 A new capsule directory will be created, and the user will be sent an email with a confirmation link which must be used before they can publish.
 
