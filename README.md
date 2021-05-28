@@ -38,14 +38,18 @@ Once you have installed Trebuchet, you will need to do some initial set up:
 trebuchet build
 ```
 
+## Commands
+
+Trebuchet provides five commands for administrators.
+
+### `build`
+
 This command will install, in the directory from where you ran the command:
 
 1. a `web` directory containing the Trebuchet website files;
 2. a `capsules` directory containing a default `index.gmi` file
 
-## Commands
-
-Trebuchet provides four commands for administrators.
+You should only need to run this once. If either of these directory names already exist, `build` will throw an error rather than overwrite them.
 
 ### `capsule EMAIL NAME`
 
