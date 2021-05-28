@@ -2,6 +2,7 @@ use std::iter;
 use rand::{Rng, distributions::Alphanumeric, thread_rng};
 extern crate clap;
 use clap::{Arg, App};
+extern crate urlencoding;
 
 // ************************************************************
 //  UTILITIES
@@ -10,7 +11,7 @@ use clap::{Arg, App};
 
 struct User {
   email: String,
-  directory: String,
+  capsule: String,
   token: String
 }
 
@@ -26,10 +27,34 @@ enum TrebuchetError {
 }
 
 impl User {
+  fn add_user(self) {
+
+    // add user to database
+  
+    // send email to user
+    self.initiate_login(EmailType::Confirm)
+  }
+
   fn send_email(self, email_type: EmailType) {
-    // TESTING
+    // create URL
+    let root_domain = "https://example.com"; // TODO: this needs to be an ENV value
+    let email = urlencoding::encode(&self.email);
+    let link = format!("{}/{:?}?token={}&email={}", root_domain, email_type, self.token, email);
+
+    // email text templates
+    let confirmation_email_text = format!("Hello!\n\nYou are being invited to publish a Gemini capsule named {}, via {}.\n\nOpen the link below to confirm.\n\n<a href=\"{}\">{}</a>", self.capsule, root_domain, link, link);
+
+    let login_email_text = format!("Hello!\n\nYou or someone else initiated a login at {}.\n\nOpen the link below to complete your login.\n\n<a href=\"{}\">{}</a>\n\nIf this was not you, ignore this email or advise your server administrator.", root_domain, link, link);
+
+    // send email according to email_type
+    //TESTING
+    match email_type {
+      EmailType::Confirm => println!("{}", confirmation_email_text),
+      EmailType::LogIn => println!("{}", login_email_text)
+    }
+
     
-    println!("emailing {} email with URL http://example.com/{:?}?token={}", self.email, email_type, self.token)
+    
 
   }
   
@@ -49,7 +74,10 @@ impl User {
 
   fn initiate_login(self, etype: EmailType) {
 
-    // set expiry date 
+    // find user in DB
+    // set self.capsule value
+
+    // create expiry date
     // add token to DB - token, email, expiry
 
     // send email
@@ -57,10 +85,10 @@ impl User {
   }
 }
 
-fn build_user(email: &str, dir: &str) -> User {
+fn build_user(email: &str, capsule: &str) -> User {
   User {
     email: String::from(email),
-    directory: String::from(dir),
+    capsule: String::from(capsule),
     token: create_otp()
   }
 }
@@ -214,16 +242,6 @@ fn create_otp() -> String {
 //  - initial user email
 //  - user subdirectory (default none) <-- do no allow web users to alter this directly, too dangerous!
 
-fn add_user(mut args: clap::Values) {
-  // we can use unwrap because clap will catch missing args
-  let user = build_user(args.next().unwrap(), args.next().unwrap());
-  // add user to database
-
-  // send email to user
-  user.initiate_login(EmailType::Confirm)
-
-}
-
 // display success/fail message
 
 // send email to user with confirmation link
@@ -325,30 +343,28 @@ fn main() {
           .conflicts_with_all(&["install", "capsule", "user", "capsule"]))
       .get_matches();
 
-  // it's ok to use unwrap here because clap ensures there will be values present
+  // it's ok to use unwrap here because clap ensures there will be the required a present
   if matches.is_present("install") {
     println!("I am installing!")
   }
   if matches.is_present("capsule") {
-    println!("I am adding a user!");
-    let args = matches.values_of("capsule").unwrap();
-    // TESTING
-    add_user(args)
+    let args: Vec<&str> = matches.values_of("capsule").unwrap().collect();
+    build_user(args[0], args[1]).add_user()
   }
   if matches.is_present("delete") {
-    println!("I am removing a user!")
+    let args: Vec<&str> = matches.values_of("delete").unwrap().collect();
+    // build_user(args[0], args[1]).delete_user()
   }
   if matches.is_present("user") {
     if matches.is_present("confirm") {
-      println!("I am confirming user details!")
+        build_user(matches.value_of("user").unwrap(), "").initiate_login(EmailType::Confirm)
     } else if matches.is_present("login") {
-      println!("I am sending a user login link!");
-      build_user(matches.value_of("user").unwrap(), "").send_email(EmailType::LogIn)
+        build_user(matches.value_of("user").unwrap(), "").initiate_login(EmailType::LogIn)
     } else {
-      println!("I am printing user details!")
+        println!("I am printing user details!")
     }
   }
   if matches.is_present("statistics") {
-    println!("I am printing statistics!")
+      println!("I am printing statistics!")
   }
 }
