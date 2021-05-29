@@ -1,6 +1,7 @@
+#[allow(dead_code)]
 pub mod utils {
 
-  use std::iter;
+  use std::{iter, fs::File};
   use rand::{Rng, distributions::Alphanumeric, thread_rng};
 
 // Structs and enums
@@ -39,6 +40,11 @@ pub mod utils {
       capsule: String::from(capsule),
       token: create_otp()
     }
+  }
+
+  pub fn file_exists(path: &str) -> std::io::Result<()> {
+    let _f = File::open(path)?;
+    Ok(())
   }
 
   fn create_otp() -> String {
@@ -110,7 +116,7 @@ pub mod utils {
       // if no match anywhere return TrebuchetError::TokenError("Token not recognised".to_string())
       // if both ok check email matches
       // if no match return TrebuchetError::EmailError("Email address not found")
-      
+
       // find token in DB
       // TESTING
       let token_matches = false;
@@ -138,5 +144,212 @@ pub mod utils {
         }
       }
     }
+  }
+}
+
+pub mod database {
+  use std::io::prelude::*;
+  use std::fs;
+  use sqlite;
+  
+  pub fn build_tables() -> Result<(), sqlite::Error>{
+
+    let connection = sqlite::Connection::open("trebuchet.db")?;
+          // users - email, home_directory, confirmed (bool)
+          // tokens - token, email, expiry (datetime)
+          // expired_tokens - token, email, used (bool)
+          // documents - owner (link to user), content, title, tags, type, is_draft (bool), published_date, updated_date, uses_footer (bool), uses_header (bool)
+    connection
+    .execute(
+        "
+        CREATE TABLE users (email TEXT, home_directory TEXT, confirmed INTEGER);
+        CREATE TABLE tokens (token TEXT, email TEXT, expiry INTEGER);
+        CREATE TABLE expired_tokens (token TEXT, email TEXT, used INTEGER);
+        CREATE TABLE documents (owner INTEGER, content TEXT, title TEXT, tags TEXT, type TEXT, is_draft INTEGER, published_date TEXT, updated_unix_time INTEGER, uses_footer INTEGER, uses_header INTEGER)
+        ",
+    )?;
+    Ok(())
+  }
+
+  pub fn create_default_files() -> std::io::Result<()>{
+
+    // create directories
+    fs::create_dir("./web")?;
+    fs::create_dir("./capsules")?;
+    println!("✔   default directories created");
+    // create gemini index file
+    let mut gem = fs::File::create("./capsules/index.gmi")?;
+    gem.write_all(b"# Home\n\nWelcome to my site built with Trebuchet!\n\n=> gemini://trebuchet.hugh.run Find out more about Trebuchet")?;
+
+    // create web files
+    let mut html = fs::File::create("./web/index.html")?;
+    html.write_all(b"<!DOCTYPE html>
+    <html lang='en'>
+    <head>
+      <meta charset='UTF-8'>
+      <meta http-equiv='X-UA-Compatible' content='IE=edge'>
+      <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+      <link href='style.css' rel='stylesheet'>
+      <title>Trebuchet</title>
+    </head>
+    <body>
+      <div class='header'>
+        <div class='grid'>
+          <h1 class='site-heading'>Trebuchet</h1>
+          <span class='g1'>
+            <strong>Links:</strong><br>
+            <strong>Headings:</strong><br><br><br>
+            <strong>Bulleted List:</strong><br><br>
+            <strong>Blockquote:</strong><br>
+            <strong>Preformatted:</strong><br>
+          </span>
+          <span class='examples'>
+            => gemini://example.com A cool gemlog<br>
+            # Heading level 1<br>
+            ## Heading level 2<br>
+            ### Heading level 3 (that's it!)<br>
+            * item 1<br>
+            * item 2 etc...<br>
+            > Shall I compare thee to a summer's day...<br>
+            ```<br>
+            fn example(arg):<br>
+            &nbsp;&nbsp;print(arg)<br><br>
+            ``` 
+          </span>
+        </div>
+        <div id='flash'></div>
+        <form id='post-content'>
+          <textarea id='post-text' rows='2'></textarea>
+        </form>
+        <button form='post-content' type='submit' action='#'>Publish!</button>
+      </div>
+      <script src='./trebuchet.js'></script>
+    </body>
+    </html>")?;
+    let mut css = fs::File::create("./web/style.css")?;
+    css.write_all(b"body {
+      background-color: #323232;
+      color: #fff;
+      font-family: 'Consolas', 'Courier New', Courier, monospace;
+      font-size: 18px;
+    }
+    
+    button {
+      font-size: 16px;
+      padding: 0.25em 0.5em;
+      margin: 2em auto 2em 84%;
+      background-color: #F49907;
+      /* color: lightgreen; */
+      border: 2px transparent solid;
+    }
+    
+    @media screen and (min-width: 75em) {
+      button {
+        margin: 2em auto 2em calc(50% + 26em);
+      }
+    }
+    
+    #post-content {
+      text-align: center; 
+    }
+    
+    #post-text {
+      width: 80%;
+      max-width: 60em;
+      padding: 0.5em;
+      border: none;
+      resize: none; 
+      text-align: left; 
+      font-size: 16px; 
+      font-family: 'JetBrains Mono', 'Consolas', 'Courier New', Courier, monospace; 
+      background-color: #464646;
+      color: #F49907;
+      outline: none;
+    }
+    
+    #flash {
+      text-align: center;
+    }
+    
+    #flash div {
+      margin: 1em auto;
+      padding: 0.25em 0.5em;
+      width: 58%;
+      max-width: 52em;
+      background-color: lightcoral;
+    }
+    
+    .grid {
+      display: grid;
+      grid-template-columns: 10em auto;
+      margin-bottom: 2em;
+    }
+    
+    .g1 {
+      grid-column: 1;
+      text-align: right;
+    }
+    
+    .examples {
+      grid-column: 2;
+      color: #F49907;
+      padding-left: 1em;
+    }
+    
+    .site-heading {
+      grid-column: 2;
+      color: #fff;
+    }
+    ")?;
+    let mut js = fs::File::create("./web/trebuchet.js")?;
+    js.write_all(b"function flash(msg) {
+      let alert = document.querySelector('#flash').appendChild(document.createElement('div'))
+      alert.textContent = msg
+    }
+    
+    let form = document.querySelector('#post-content');
+    let postText = document.querySelector('#post-text');
+    
+    form.addEventListener('submit', function( event) {
+      let text = postText.value
+      console.log(text)
+      event.preventDefault()
+    }, false)
+    
+    form.addEventListener('keyup', function(e) {
+      // if key is Enter/Return key...
+      if (e.keyCode == 13) {
+    
+        // remove any flash messages that are already visible
+        let msgs = document.querySelector('#flash')
+        if (msgs.hasChildNodes) {
+          for (let n of msgs.childNodes) {
+            msgs.removeChild(n)
+          }
+        }
+    
+        let gemPost = postText.value
+        let arr = gemPost.split('\\n')
+        postText.rows = arr.length // auto-resize to fit text
+        var line = arr[arr.length - 2] // only check the last line we just created
+    
+        // check headings
+        if (line.startsWith('#')) {
+          if ( !(line.startsWith('# ') || line.startsWith('## ') || line.startsWith('### ')) ) {
+            flash(`Is '${line}' at line ${arr.indexOf(line) +1} supposed to be a heading? Add a space after the '#' or make it level 1 to 3 only`)
+          }
+        }
+    
+        // check links
+        if (line.startsWith('=>')) {
+          let sections = line.split(' ')
+          if ( !['http://', 'https://', 'gemini://', 'gopher://', 'mailto://', 'sftp://', 'ftp://', 'telnet://'].some(p => sections[1].startsWith(p))) {
+            flash(`Your link '${line}' at line ${arr.indexOf(line) +1} looks a bit funny: did you put the URL and the text around the wrong way?`)
+          }
+        }
+      }
+    })")?;
+    println!("✔   default files created");
+    Ok(())
   }
 }

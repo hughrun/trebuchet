@@ -9,4 +9,5 @@ edition = "2018"
 [dependencies]
 clap = "2.33.3"
 rand = "0.8.3"
+sqlite = "0.26.0"
 urlencoding = "1.0.0"

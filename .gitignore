@@ -1,1 +1,4 @@
 /target
+capsules/*
+web/*
+trebuchet.db
