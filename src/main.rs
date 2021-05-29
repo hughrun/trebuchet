@@ -1,107 +1,8 @@
-use std::iter;
-use rand::{Rng, distributions::Alphanumeric, thread_rng};
 extern crate clap;
-use clap::{Arg, App};
 extern crate urlencoding;
+use trebuchet::utils::{build_user, EmailType};
+use clap::{Arg, App};
 
-// ************************************************************
-//  UTILITIES
-// NOTE: this could probably go in a /src/lib.rs
-// ************************************************************
-
-struct User {
-  email: String,
-  capsule: String,
-  token: String
-}
-
-#[derive(Debug)]
-enum EmailType {
-  Confirm,
-  LogIn
-}
-
-enum TrebuchetError {
-  TokenError(String),
-  EmailError(String)
-}
-
-impl User {
-  fn add_user(self) {
-
-    // add user to database
-  
-    // send email to user
-    self.initiate_login(EmailType::Confirm)
-  }
-
-  fn send_email(self, email_type: EmailType) {
-    // create URL
-    let root_domain = "https://example.com"; // TODO: this needs to be an ENV value
-    let email = urlencoding::encode(&self.email);
-    let link = format!("{}/{:?}?token={}&email={}", root_domain, email_type, self.token, email);
-
-    // email text templates
-    let confirmation_email_text = format!("Hello!\n\nYou are being invited to publish a Gemini capsule named {}, via {}.\n\nOpen the link below to confirm.\n\n<a href=\"{}\">{}</a>", self.capsule, root_domain, link, link);
-
-    let login_email_text = format!("Hello!\n\nYou or someone else initiated a login at {}.\n\nOpen the link below to complete your login.\n\n<a href=\"{}\">{}</a>\n\nIf this was not you, ignore this email or advise your server administrator.", root_domain, link, link);
-
-    // send email according to email_type
-    //TESTING
-    match email_type {
-      EmailType::Confirm => println!("{}", confirmation_email_text),
-      EmailType::LogIn => println!("{}", login_email_text)
-    }
-
-    
-    
-
-  }
-  
-  fn match_token(self) -> Result<Self,TrebuchetError>{
-  
-    // find token in DB
-    // if no match look in expired_tokens table
-    // if in expired_tokens check if used == true
-    // if true, return TrebuchetError::TokenError("Token already used".to_string())
-    // if false return TrebuchetError::TokenError("Token has expired".to_string())
-    // if no match anywhere return TrebuchetError::TokenError("Token not recognised".to_string())
-    // if both ok check email matches
-    // if no match return TrebuchetError::EmailError("Email address not found")
-    Ok(self)
-
-  }
-
-  fn initiate_login(self, etype: EmailType) {
-
-    // find user in DB
-    // set self.capsule value
-
-    // create expiry date
-    // add token to DB - token, email, expiry
-
-    // send email
-    self.send_email(etype)
-  }
-}
-
-fn build_user(email: &str, capsule: &str) -> User {
-  User {
-    email: String::from(email),
-    capsule: String::from(capsule),
-    token: create_otp()
-  }
-}
-
-fn create_otp() -> String {
-  let mut rng = thread_rng();
-  let chars: String = iter::repeat(())
-      .map(|()| rng.sample(Alphanumeric))
-      .map(char::from)
-      .take(52)
-      .collect();
-  return chars
-}
 
 // ************************************************************
 //  DATABASE
@@ -111,10 +12,15 @@ fn create_otp() -> String {
 //  INITIATE
 // **********
 
+// CHECK that sqlite is installed
+// check whether there is already a database
+// if there is, throw error
+// otherwise create new DB file
+
 // users - email, home_directory, confirmed (bool)
 // tokens - token, email, expiry (datetime)
-// expired_tokens - token, used (bool)
-// files - owner, content, name, tags, type, is_draft (bool), published_date, updated_date, uses_footer (bool), uses_header (bool)
+// expired_tokens - token, email, used (bool)
+// documents - owner (link to user), content, title, tags, type, is_draft (bool), published_date, updated_date, uses_footer (bool), uses_header (bool)
 
 // **********
 //  ADD USER
@@ -294,58 +200,68 @@ fn main() {
       .version("0.1.0")
       .author("Hugh Rundle <hugh@hughrundle.net>")
       .about("Publish and manage gemini sites from the web")
-      .arg(Arg::with_name("install")
+      .arg(Arg::with_name("build")
           .short("b")
           .long("build")
           .help("Set up a default user and web components")
           .takes_value(false)
-          .conflicts_with_all(&["capsule", "delete", "user", "statistics"]))
+          .conflicts_with_all(&["capsule", "delete", "listen", "user", "statistics"]))
       .arg(Arg::with_name("capsule")
           .short("c")
           .long("capsule")
           .help("Add a user with EMAIL address, whose gemini site will be saved to SUBDIRECTORY")
           .value_names(&["EMAIL", "SUBDIRECTORY"])
           .takes_value(true)
-          .conflicts_with_all(&["install", "delete", "user", "statistics"]))
+          .conflicts_with_all(&["build", "delete", "listen", "user", "statistics"]))
       .arg(Arg::with_name("delete")
           .short("d")
           .long("delete")
           .help("Remove a user and their files by providing their EMAIL address and the SUBDIRECTORY their files are saved to")
           .value_names(&["EMAIL", "SUBDIRECTORY"])
           .takes_value(true)
-          .conflicts_with_all(&["install", "capsule", "user", "statistics"]))
+          .conflicts_with_all(&["build", "capsule", "user", "statistics"]))
+      .arg(Arg::with_name("listen")
+          .short("l")
+          .long("listen")
+          .help("Listen for web traffic")
+          .takes_value(false)
+          .conflicts_with_all(&["build", "capsule", "delete", "listen", "user", "statistics"]))
       .arg(Arg::with_name("user")
           .short("u")
           .long("user")
           .help("Display details for a particular user with EMAIL address")
           .value_name("EMAIL")
           .takes_value(true)
-          .conflicts_with_all(&["install", "delete", "capsule", "statistics"]))
+          .conflicts_with_all(&["build", "delete", "listen", "capsule", "statistics"]))
           .arg(Arg::with_name("login")
           .short("l")
           .long("login")
           .help("Send login email")
           .takes_value(false)
           .requires("user")
-          .conflicts_with_all(&["confirm", "install", "delete", "capsule", "statistics"]))
+          .conflicts_with_all(&["confirm", "build", "delete", "listen", "capsule", "statistics"]))
           .arg(Arg::with_name("confirm")
           .short("n")
           .long("confirm")
           .help("Send confirmation email")
           .takes_value(false)
           .requires("user")
-          .conflicts_with_all(&["login", "install", "delete", "capsule", "statistics"]))
+          .conflicts_with_all(&["login", "build", "delete", "listen", "capsule", "statistics"]))
       .arg(Arg::with_name("statistics")
           .short("s")
           .long("statistics")
           .help("Display statistics about this trebuchet installation")
           .takes_value(false)
-          .conflicts_with_all(&["install", "capsule", "user", "capsule"]))
+          .conflicts_with_all(&["build", "capsule", "user", "capsule"]))
       .get_matches();
 
   // it's ok to use unwrap here because clap ensures there will be the required a present
-  if matches.is_present("install") {
-    println!("I am installing!")
+  if matches.is_present("build") {
+    println!("I am building!")
+  }
+  if matches.is_present("listen") {
+    // TODO: ideally this runs in the background automatically thought that could perhaps better be a systemd service
+    println!("I am listening for web traffic...")
   }
   if matches.is_present("capsule") {
     let args: Vec<&str> = matches.values_of("capsule").unwrap().collect();
@@ -357,9 +273,9 @@ fn main() {
   }
   if matches.is_present("user") {
     if matches.is_present("confirm") {
-        build_user(matches.value_of("user").unwrap(), "").initiate_login(EmailType::Confirm)
+      build_user(matches.value_of("user").unwrap(), "").initiate_login(EmailType::Confirm)
     } else if matches.is_present("login") {
-        build_user(matches.value_of("user").unwrap(), "").initiate_login(EmailType::LogIn)
+      build_user(matches.value_of("user").unwrap(), "").initiate_login(EmailType::LogIn)
     } else {
         println!("I am printing user details!")
     }
