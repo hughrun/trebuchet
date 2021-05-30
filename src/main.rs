@@ -21,25 +21,22 @@ fn build() {
 
   if sqlite_check.success() {
     println!("✔   sqlite installed");
-    // check whether there is already a database
+    // create new DB file
     let installed = file_exists("./trebuchet.db");
-    // if there is, throw error
     match installed {
       Ok(()) => eprintln!("⚠️  database already exists"),
       Err(err) => {
         if err.kind() == std::io::ErrorKind::NotFound {
-            // otherwise create new DB file
             match database::build_tables() {
               Ok(()) => {
                 println!("✔   database created");
-                // check for web and capsule directories
+                // create web and capsule directories
                 match database::create_default_files() {
                   Ok(()) => { 
                     println!("😎  You are ready to use Trebuchet")
                 },
                   Err(err) => eprintln!("Error creating default files: {}", err)
                 }
-                // if neither exists, create them and write out files
               },
               Err(err) => eprintln!("Error creating database: {}", err)
             }
@@ -297,7 +294,10 @@ fn main() {
   }
   if matches.is_present("capsule") {
     let args: Vec<&str> = matches.values_of("capsule").unwrap().collect();
-    build_user(args[0], args[1]).add_user()
+    match build_user(args[0], args[1]).add_user() {
+      Ok(()) => println!("✔  User {} added to database", args[0]),
+      Err(err) => eprintln!("ERROR Could not build capsule: {}", err)
+    }
   }
   if matches.is_present("delete") {
     // TODO: remove underscore and uncomment once delete_user() is ready
@@ -306,14 +306,20 @@ fn main() {
   }
   if matches.is_present("user") {
     if matches.is_present("confirm") {
-      build_user(matches.value_of("user").unwrap(), "").initiate_login(EmailType::Confirm)
+      if let Err(err) = build_user(matches.value_of("user").unwrap(), "").initiate_login(EmailType::Confirm) {
+        eprintln!("ERROR Could not resend confirmation email: {}", err)
+      }
     } else if matches.is_present("login") {
-      build_user(matches.value_of("user").unwrap(), "").initiate_login(EmailType::LogIn)
+      if let Err(err) = build_user(matches.value_of("user").unwrap(), "").initiate_login(EmailType::LogIn) {
+        eprintln!("ERROR Could not send login email: {}", err)
+      }
     } else {
+      // TODO: 
         println!("I am printing user details!")
     }
   }
   if matches.is_present("statistics") {
+    // TODO:
       println!("I am printing statistics!")
   }
 }

@@ -1,16 +1,17 @@
 #[allow(dead_code)]
 pub mod utils {
 
-  use std::{iter, fs::File};
+  use std::{io, iter, fs::File};
   use rand::{Rng, distributions::Alphanumeric, thread_rng};
+  use crate::database;
 
 // Structs and enums
 // =================
 
   pub struct User {
-    email: String,
-    capsule: String,
-    token: String
+    pub email: String,
+    pub capsule: String,
+    pub token: String
   }
 
   struct Token {
@@ -65,16 +66,15 @@ pub mod utils {
     // PUBLIC FUNCTIONS
     // ----------------
 
-    pub fn add_user(self) {
+    pub fn add_user(self) -> Result<(), Box<(dyn std::error::Error)>>{
 
-      // add user to database
-    
-      // send email to user
-      self.initiate_login(EmailType::Confirm)
+      // add user to database and send email
+      database::add_user(self)?.initiate_login(EmailType::Confirm)?;
+      Ok(())
     }
 
-    pub fn initiate_login(self, etype: EmailType) {
-
+    pub fn initiate_login(self, etype: EmailType) -> Result<(), io::Error> {
+      // TODO:
       // find user in DB
       // set self.capsule value
 
@@ -82,13 +82,14 @@ pub mod utils {
       // add token to DB - token, email, expiry
 
       // send email
-      self.send_email(etype)
+      self.build_email(etype)?;
+      Ok(())
     }
 
     // PRIVATE FUNCTIONS
     // ----------------
 
-    fn send_email(self, email_type: EmailType) {
+    fn build_email(self, email_type: EmailType) -> Result<(), io::Error> {
       // create URL
       let root_domain = "https://example.com"; // TODO: this needs to be an ENV value
       let email = urlencoding::encode(&self.email);
@@ -102,11 +103,18 @@ pub mod utils {
       // send email according to email_type
       //TESTING
       match email_type {
-        EmailType::Confirm => println!("{}", confirmation_email_text),
-        EmailType::LogIn => println!("{}", login_email_text)
+        EmailType::Confirm => self.send_email(confirmation_email_text),
+        EmailType::LogIn => self.send_email(login_email_text)
       }
 
     }
+
+    fn send_email(self, message: String) -> Result<(), io::Error> {
+      // TODO:
+      // TESTING:
+      println!("{}", message);
+      Ok(())
+    } 
     
     fn match_token(self) -> Result<Self,TrebuchetError>{
           // if no match look in expired_tokens table
@@ -148,24 +156,22 @@ pub mod utils {
 }
 
 pub mod database {
-  use std::io::prelude::*;
+  use crate::utils;
+  use std::{io::prelude::*};
   use std::fs;
   use sqlite;
   
   pub fn build_tables() -> Result<(), sqlite::Error>{
 
     let connection = sqlite::Connection::open("trebuchet.db")?;
-          // users - email, home_directory, confirmed (bool)
-          // tokens - token, email, expiry (datetime)
-          // expired_tokens - token, email, used (bool)
-          // documents - owner (link to user), content, title, tags, type, is_draft (bool), published_date, updated_date, uses_footer (bool), uses_header (bool)
-    connection
-    .execute(
+
+    connection.execute(
         "
-        CREATE TABLE users (email TEXT, home_directory TEXT, confirmed INTEGER);
-        CREATE TABLE tokens (token TEXT, email TEXT, expiry INTEGER);
-        CREATE TABLE expired_tokens (token TEXT, email TEXT, used INTEGER);
-        CREATE TABLE documents (owner INTEGER, content TEXT, title TEXT, tags TEXT, type TEXT, is_draft INTEGER, published_date TEXT, updated_unix_time INTEGER, uses_footer INTEGER, uses_header INTEGER)
+        CREATE TABLE users (email TEXT UNIQUE, home_directory TEXT UNIQUE, confirmed INTEGER NOT NULL);
+        CREATE TABLE tokens (token TEXT PRIMARY KEY, email TEXT NOT NULL, expiry TEXT NOT NULL);
+        CREATE TABLE expired_tokens (token TEXT PRIMARY KEY, email TEXT NOT NULL, used INTEGER NOT NULL);
+        CREATE TABLE cookies (user INTEGER NOT NULL, expiry TEXT NOT NULL);
+        CREATE TABLE documents (owner INTEGER NOT NULL, content TEXT, title TEXT, tags TEXT, type TEXT NOT NULL, is_draft INTEGER, published_date TEXT DEFAULT CURRENT_TIMESTAMP, last_updated TEXT DEFAULT CURRENT_TIMESTAMP, uses_footer INTEGER, uses_header INTEGER);
         ",
     )?;
     Ok(())
@@ -351,5 +357,23 @@ pub mod database {
     })")?;
     println!("✔   default files created");
     Ok(())
+  }
+
+  pub fn add_user(user: utils::User) -> Result<utils::User, sqlite::Error>{
+
+    let connection = sqlite::Connection::open("trebuchet.db")?;
+    // TODO:
+    // we need to borrow these values so we can return the user later
+    let e = &user.email;
+    let c = &user.capsule;
+    // add the user to the db and return them
+    let statement = connection.prepare("INSERT INTO users VALUES (:email, :capsule, '0')")?;
+    let mut cursor = statement.into_cursor();
+    cursor.bind_by_name(vec![
+      (":email", sqlite::Value::String(e.to_string())), 
+      (":capsule", sqlite::Value::String(c.to_string())),
+      ])?;
+      cursor.next()?;
+    Ok(user)
   }
 }
