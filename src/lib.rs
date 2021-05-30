@@ -88,7 +88,7 @@ pub mod utils {
     }
 
     pub fn delete_user(self) -> Result<(), Box<(dyn std::error::Error)>>{
-
+      
       // TODO: delete user files
       // remove user from database and send email
       database::delete_user(self)?.build_email(EmailType::Delete)?;

@@ -1,4 +1,4 @@
-use std::process::Command;
+use std::{io, process::Command};
 use trebuchet::utils::{build_user, EmailType, file_exists};
 use trebuchet::database;
 use clap::{Arg, App};
@@ -300,12 +300,26 @@ fn main() {
     }
   }
   if matches.is_present("delete") {
-    // TODO: remove underscore and uncomment once delete_user() is ready
     let args: Vec<&str> = matches.values_of("delete").unwrap().collect();
-    match build_user(args[0], args[1]).delete_user() {
-      Ok(()) => println!("✔  User {} deleted from database", args[0]),
-      Err(err) => eprintln!("ERROR Could not delete capsule: {}", err)
-    }
+    // TODO: force administrator to confirm
+    println!("You are about to delete the following user: {}", args[0]);
+    println!("Confirm this is what you want to do by typing the user email again below:");
+    let mut input_text = String::new();
+    io::stdin()
+        .read_line(&mut input_text)
+        .expect("failed to read from stdin");
+
+    let trimmed = input_text.trim();
+    let is_match = trimmed.parse::<String>() == Ok(args[0].to_string());
+    match is_match {
+        true => {
+          match build_user(args[0], args[1]).delete_user() {
+            Ok(()) => println!("✔  User {} deleted from database", args[0]),
+            Err(err) => eprintln!("ERROR Could not delete capsule: {}", err)
+          }
+        },
+        false => println!("⚠️  Your text does not match the user email. Deletion aborted."),
+    };
   }
   if matches.is_present("user") {
     if matches.is_present("confirm") {
