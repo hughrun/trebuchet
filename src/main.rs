@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::{io, process::Command};
 use trebuchet::utils::{build_user, EmailType, file_exists};
 use trebuchet::database;
@@ -332,7 +334,11 @@ fn main() {
       }
     } else {
       // TODO: 
-        println!("I am printing user details!")
+        println!("I am printing user details!");
+        // TESTING:
+        if let Err(err) = build_user("molly@dog.ceo", "doggie").confirm_user() {
+          eprintln!("ERROR Could not resend confirmation email: {}", err.message)
+        }
     }
   }
   if matches.is_present("statistics") {

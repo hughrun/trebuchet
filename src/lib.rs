@@ -1,9 +1,74 @@
-#[allow(dead_code)]
+#![allow(dead_code)]
+
+pub mod error {
+  use std::{fmt, io};
+
+  #[derive(Debug)]
+  pub enum TrebuchetErrorType {
+    EmailError,
+    IoError,
+    NotFound,
+    SqliteError,
+    TooManyMatches,
+    TokenError
+  }
+
+  #[derive(Debug)]
+  pub struct TrebuchetError {
+    pub kind: TrebuchetErrorType,
+    pub message: String,
+  }
+
+  impl fmt::Display for TrebuchetError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let err_msg = match &self.kind {
+          TrebuchetErrorType::EmailError => "Error sending email",
+          TrebuchetErrorType::IoError => "Error from IO process",
+          TrebuchetErrorType::NotFound => "No rows match in database",
+          TrebuchetErrorType::SqliteError => "sqlite returned an error",
+          TrebuchetErrorType::TooManyMatches => "Too many matches in database",
+          TrebuchetErrorType::TokenError => "Error checking token"
+        };
+
+        write!(f, "{}", err_msg)
+    }
+}
+
+  // Implement std::convert::From for TrebuchetError; from io::Error
+  impl From<io::Error> for TrebuchetError {
+    fn from(error: io::Error) -> Self {
+      TrebuchetError {
+        kind: TrebuchetErrorType::IoError,
+        message: error.to_string(),
+      }
+    }
+  }
+
+  // Implement std::convert::From for TrebuchetError; from sqlite::Error
+  impl From<sqlite::Error> for TrebuchetError {
+    fn from(error: sqlite::Error) -> Self {
+    TrebuchetError {
+        kind: TrebuchetErrorType::SqliteError,
+        message: error.to_string(),
+      }
+    }
+  }
+
+  pub fn build_token_error(msg: String) -> TrebuchetError {
+    TrebuchetError {
+      kind: TrebuchetErrorType::TokenError,
+      message: msg
+    }
+  }
+
+}
+
 pub mod utils {
 
-  use std::{io, iter, fs::File};
+  use std::{fs::File, io, iter};
   use rand::{Rng, distributions::Alphanumeric, thread_rng};
   use crate::database;
+  use crate::error::{TrebuchetError, build_token_error};
 
 // Structs and enums
 // =================
@@ -26,11 +91,6 @@ pub mod utils {
     Confirm,
     Delete,
     LogIn
-  }
-
-  enum TrebuchetError {
-    TokenError(String),
-    EmailError(String)
   }
 
 // Orphaned Functions
@@ -74,7 +134,7 @@ pub mod utils {
       Ok(())
     }
 
-    pub fn confirm_user(self) -> Result<(), Box<(dyn std::error::Error)>>{
+    pub fn confirm_user(self) -> Result<(), TrebuchetError>{
 
       // TODO: update token 
       
@@ -141,7 +201,7 @@ pub mod utils {
       println!("{}", message);
       Ok(())
     } 
-    
+
     fn match_token(self) -> Result<Self,TrebuchetError>{
           // if no match look in expired_tokens table
       // if in expired_tokens check if used == true
@@ -169,11 +229,11 @@ pub mod utils {
           match unmatched_token {
             Some(token) => {
               match token.used {
-                true => Err(TrebuchetError::TokenError("Token already used".to_string())),
-                false => Err(TrebuchetError::TokenError("Token has expired".to_string()))
+                true => Err(build_token_error("Token already used".to_string())),
+                false => Err(build_token_error("Token has expired".to_string()))
               }
             },
-            None => Err(TrebuchetError::TokenError("Token not recognised".to_string()))
+            None => Err(build_token_error("Token not recognised".to_string()))
           }
         }
       }
@@ -183,6 +243,7 @@ pub mod utils {
 
 pub mod database {
   use crate::utils;
+  use crate::error;
   use std::{io::prelude::*};
   use std::fs;
   use sqlite;
@@ -423,7 +484,7 @@ pub mod database {
     Ok(user)
   }
 
-  pub fn confirm_user(user: utils::User) -> Result<utils::User, sqlite::Error>{
+  pub fn confirm_user(user: utils::User) -> Result<utils::User, error::TrebuchetError>{
     // TODO: check the TOKEN matches
     let connection = sqlite::Connection::open("trebuchet.db")?;
     // we need to borrow these values so we can return the user later
@@ -434,14 +495,28 @@ pub mod database {
       "
       UPDATE users 
       SET confirmed = '1' 
-      WHERE email = :email AND capsule = :capsule
+      WHERE email = :email AND home_directory = :capsule
       ")?;
     let mut cursor = statement.into_cursor();
     cursor.bind_by_name(vec![
       (":email", sqlite::Value::String(e.to_string())), 
       (":capsule", sqlite::Value::String(c.to_string())),
       ])?;
-      cursor.next()?;
-    Ok(user)
+    cursor.next()?;
+
+    // sqlite returns a success code of 0 if the operation could have done something, even if it doesn't i.e. if nothing matches.
+    // we therefore need to check how many rows changed and return a custom error
+    let rows_affected = connection.change_count();
+    match rows_affected {
+      1 => Ok(user),
+      0 => Err(error::TrebuchetError {
+        kind : error::TrebuchetErrorType::NotFound, // note this is not a real SQLITE error code
+        message : String::from("No matching rows found")
+      }),
+      _ => Err(error::TrebuchetError {
+        kind : error::TrebuchetErrorType::TooManyMatches, // note this is not a real SQLITE error code
+        message : String::from("More than one row matches but only one row should!")
+      })
+    }
   }
 }
