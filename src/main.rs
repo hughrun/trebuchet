@@ -301,8 +301,11 @@ fn main() {
   }
   if matches.is_present("delete") {
     // TODO: remove underscore and uncomment once delete_user() is ready
-    let _args: Vec<&str> = matches.values_of("delete").unwrap().collect();
-    // build_user(args[0], args[1]).delete_user()
+    let args: Vec<&str> = matches.values_of("delete").unwrap().collect();
+    match build_user(args[0], args[1]).delete_user() {
+      Ok(()) => println!("✔  User {} deleted from database", args[0]),
+      Err(err) => eprintln!("ERROR Could not delete capsule: {}", err)
+    }
   }
   if matches.is_present("user") {
     if matches.is_present("confirm") {

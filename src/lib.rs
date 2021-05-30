@@ -24,6 +24,7 @@ pub mod utils {
   #[derive(Debug)]
   pub enum EmailType {
     Confirm,
+    Delete,
     LogIn
   }
 
@@ -73,6 +74,28 @@ pub mod utils {
       Ok(())
     }
 
+    pub fn confirm_user(self) -> Result<(), Box<(dyn std::error::Error)>>{
+
+      // TODO: update token 
+      
+      // TODO: add user files
+
+      // update database and send email
+      database::confirm_user(self)?.build_email(EmailType::Confirm)?;
+
+      //  TODO: probably should build in some error checking here to roll back if necessary
+      Ok(())
+    }
+
+    pub fn delete_user(self) -> Result<(), Box<(dyn std::error::Error)>>{
+
+      // TODO: delete user files
+      // remove user from database and send email
+      database::delete_user(self)?.build_email(EmailType::Delete)?;
+
+      //  TODO: probably should build in some error checking here to roll back if necessary
+      Ok(())
+    }
     pub fn initiate_login(self, etype: EmailType) -> Result<(), io::Error> {
       // TODO:
       // find user in DB
@@ -98,12 +121,15 @@ pub mod utils {
       // email text templates
       let confirmation_email_text = format!("Hello!\n\nYou are being invited to publish a Gemini capsule named {}, via {}.\n\nOpen the link below to confirm.\n\n<a href=\"{}\">{}</a>", self.capsule, root_domain, link, link);
 
+      let deletion_email_text = format!("Hello\n\nYour Gemini capsule named {}, served from {}, has been deleted.", self.capsule, root_domain);
+
       let login_email_text = format!("Hello!\n\nYou or someone else initiated a login at {}.\n\nOpen the link below to complete your login.\n\n<a href=\"{}\">{}</a>\n\nIf this was not you, ignore this email or advise your server administrator.", root_domain, link, link);
 
       // send email according to email_type
       //TESTING
       match email_type {
         EmailType::Confirm => self.send_email(confirmation_email_text),
+        EmailType::Delete => self.send_email(deletion_email_text),
         EmailType::LogIn => self.send_email(login_email_text)
       }
 
@@ -362,12 +388,54 @@ pub mod database {
   pub fn add_user(user: utils::User) -> Result<utils::User, sqlite::Error>{
 
     let connection = sqlite::Connection::open("trebuchet.db")?;
-    // TODO:
     // we need to borrow these values so we can return the user later
     let e = &user.email;
     let c = &user.capsule;
     // add the user to the db and return them
     let statement = connection.prepare("INSERT INTO users VALUES (:email, :capsule, '0')")?;
+    let mut cursor = statement.into_cursor();
+    cursor.bind_by_name(vec![
+      (":email", sqlite::Value::String(e.to_string())), 
+      (":capsule", sqlite::Value::String(c.to_string())),
+      ])?;
+      cursor.next()?;
+    Ok(user)
+  }
+
+  pub fn delete_user(user: utils::User) -> Result<utils::User, sqlite::Error>{
+
+    let connection = sqlite::Connection::open("trebuchet.db")?;
+    // we need to borrow these values so we can return the user later
+    let e = &user.email;
+    let c = &user.capsule;
+    // update the user confirmed value in the db and return them
+    let statement = connection.prepare(
+      "
+      DELETE FROM users 
+      WHERE email = :email AND home_directory = :capsule
+      ")?;
+    let mut cursor = statement.into_cursor();
+    cursor.bind_by_name(vec![
+      (":email", sqlite::Value::String(e.to_string())), 
+      (":capsule", sqlite::Value::String(c.to_string())),
+      ])?;
+      cursor.next()?;
+    Ok(user)
+  }
+
+  pub fn confirm_user(user: utils::User) -> Result<utils::User, sqlite::Error>{
+    // TODO: check the TOKEN matches
+    let connection = sqlite::Connection::open("trebuchet.db")?;
+    // we need to borrow these values so we can return the user later
+    let e = &user.email;
+    let c = &user.capsule;
+    // update the user confirmed value in the db and return them
+    let statement = connection.prepare(
+      "
+      UPDATE users 
+      SET confirmed = '1' 
+      WHERE email = :email AND capsule = :capsule
+      ")?;
     let mut cursor = statement.into_cursor();
     cursor.bind_by_name(vec![
       (":email", sqlite::Value::String(e.to_string())), 
