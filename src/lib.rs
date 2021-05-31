@@ -460,6 +460,9 @@ pub mod database {
       (":capsule", sqlite::Value::String(c.to_string())),
       ])?;
       cursor.next()?;
+
+      // TODO: add token to tokens collection
+
     Ok(user)
   }
 
@@ -510,13 +513,73 @@ pub mod database {
     match rows_affected {
       1 => Ok(user),
       0 => Err(error::TrebuchetError {
-        kind : error::TrebuchetErrorType::NotFound, // note this is not a real SQLITE error code
+        kind : error::TrebuchetErrorType::NotFound, 
         message : String::from("No matching rows found")
       }),
       _ => Err(error::TrebuchetError {
-        kind : error::TrebuchetErrorType::TooManyMatches, // note this is not a real SQLITE error code
+        kind : error::TrebuchetErrorType::TooManyMatches, 
         message : String::from("More than one row matches but only one row should!")
       })
     }
   }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  // ERROR MODULE
+  // ============
+  // TODO: how do we test that TrebuchetError successfully implements sqlite::Error and io::Error?
+
+  // UTILS MODULE
+  // ============
+  // TODO: database functions from utils - how do we mock them?
+
+  #[test]
+  fn utils_build_user_returns_user() {
+    let built_user = utils::build_user("hello@email.com", "capsule_name");
+    let user_two = utils::User {
+      email: "hello@email.com".to_string(),
+      capsule: "capsule_name".to_string(),
+      token: "randomstring".to_string()
+    };
+
+    assert_eq!(built_user.email, user_two.email);
+    assert_eq!(built_user.capsule, user_two.capsule);
+  }
+
+  #[test]
+  #[ignore]
+  fn utils_builds_confirmation_email() {
+    assert!(false)
+  }
+
+  #[test]
+  #[ignore]
+  fn utils_builds_login_email() {
+    assert!(false)
+  }
+
+  #[test]
+  #[ignore]
+  fn utils_builds_deletion_email() {
+    assert!(false)
+  }
+
+  #[test]
+  #[ignore]
+  fn utils_send_email_sends_email() {
+    assert!(false)
+  }
+
+  #[test]
+  #[ignore]
+  fn utils_match_token_matches_token() {
+    assert!(false)
+  }
+
+  // DATABASE MODULE
+  // ===============
+  // TODO: database module tests
+
 }
