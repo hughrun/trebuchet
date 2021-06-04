@@ -96,14 +96,6 @@ pub mod utils {
 // Orphaned Functions
 // =================
 
-  pub fn build_user(email: &str, capsule: &str) -> User {
-    User {
-      email: String::from(email),
-      capsule: String::from(capsule),
-      token: create_otp()
-    }
-  }
-
   pub fn file_exists(path: &str) -> std::io::Result<()> {
     let _f = File::open(path)?;
     Ok(())
@@ -127,33 +119,33 @@ pub mod utils {
     // PUBLIC FUNCTIONS
     // ----------------
 
-    pub fn add_user(self) -> Result<(), Box<(dyn std::error::Error)>>{
+    pub fn new(email: String, capsule: String) -> User {
+      User { email, capsule, token: create_otp() }
+    }
+
+    // TODO: should this be Box or TrebuchetError?
+    pub fn add(self) -> Result<(), Box<(dyn std::error::Error)>>{
 
       // add user to database and send email
       database::add_user(self)?.initiate_login(EmailType::Confirm)?;
       Ok(())
     }
 
-    pub fn confirm_user(self) -> Result<(), TrebuchetError>{
+    pub fn confirm(self) -> Result<(), TrebuchetError>{
 
-      // TODO: update token 
-      
       // TODO: add user files
 
       // update database and send email
-      database::confirm_user(self)?.build_email(EmailType::Confirm)?;
-
-      //  TODO: probably should build in some error checking here to roll back if necessary
+      database::confirm_user(self)?.initiate_capsule()?.build_email(EmailType::Confirm)?;
       Ok(())
     }
 
-    pub fn delete_user(self) -> Result<(), Box<(dyn std::error::Error)>>{
+    pub fn delete(self) -> Result<(), Box<(dyn std::error::Error)>>{
       
       // TODO: delete user files
+
       // remove user from database and send email
       database::delete_user(self)?.build_email(EmailType::Delete)?;
-
-      //  TODO: probably should build in some error checking here to roll back if necessary
       Ok(())
     }
     pub fn initiate_login(self, etype: EmailType) -> Result<(), io::Error> {
@@ -169,14 +161,25 @@ pub mod utils {
       Ok(())
     }
 
+    fn initiate_capsule(self) -> Result<User, TrebuchetError> {
+
+      // create home directory at ./content/{local.capsule}
+      
+      // this allows us to do things like if local.capsule is a domain (www.example.com), agate (or whatever) will serve from that domain
+      // or if it's just a username or something (~hugh-is-on-gemini), that's fine too and it becomes a path within the base domain
+      // error if already exists
+
+      // initiate default values in DB
+      database::initiate_capsule(self)
+    }
+
     // PRIVATE FUNCTIONS
     // ----------------
 
     fn build_email(self, email_type: EmailType) -> Result<(), io::Error> {
       // create URL
       let root_domain = "https://example.com"; // TODO: this needs to be an ENV value
-      let email = urlencoding::encode(&self.email);
-      let link = format!("{}/{:?}?token={}&email={}", root_domain, email_type, self.token, email);
+      let link = format!("{}/{:?}?token={}", root_domain, email_type, self.token);
 
       // email text templates
       let confirmation_email_text = format!("Hello!\n\nYou are being invited to publish a Gemini capsule named {}, via {}.\n\nOpen the link below to confirm.\n\n<a href=\"{}\">{}</a>", self.capsule, root_domain, link, link);
@@ -186,7 +189,6 @@ pub mod utils {
       let login_email_text = format!("Hello!\n\nYou or someone else initiated a login at {}.\n\nOpen the link below to complete your login.\n\n<a href=\"{}\">{}</a>\n\nIf this was not you, ignore this email or advise your server administrator.", root_domain, link, link);
 
       // send email according to email_type
-      //TESTING
       match email_type {
         EmailType::Confirm => self.send_email(confirmation_email_text),
         EmailType::Delete => self.send_email(deletion_email_text),
@@ -213,22 +215,22 @@ pub mod utils {
 
       // find token in DB
       // TESTING
-      let token_matches = false;
+      let row = User {email: "me@me.com".to_string(), capsule: "cap".to_string(), token: "123abc".to_string()};
+      let token_matches = self.token == row.token;
       match token_matches {
         true => Ok(self),
         false => {
-          // TESTING
-          let token = Token {
-            token: "123abc".to_string(),
-            email: "hugh@test.tld".to_string(),
-            expiry: "1622247491".to_string(),
-            used: false
-          };
           // TODO: replace this with a check of the DB that returns a Token if something is found and nothing if not
-          let unmatched_token = Some(token);
+          // TESTING:
+          let used = true; // we get this from the DB: was the token used or not?
+          let unmatched_token = Some(used); // this is what we actaully return from the DB checking function we need to create. It will either return Some(token.used) or None
+
+          // check whether anything was returned
+          // if None, there was no matching token at all (this should never happen)
+          // otherwise the token either was been used already or has expired
           match unmatched_token {
-            Some(token) => {
-              match token.used {
+            Some(t) => {
+              match t {
                 true => Err(build_token_error("Token already used".to_string())),
                 false => Err(build_token_error("Token has expired".to_string()))
               }
@@ -487,7 +489,7 @@ pub mod database {
     Ok(user)
   }
 
-  pub fn confirm_user(user: utils::User) -> Result<utils::User, error::TrebuchetError>{
+  pub fn confirm_user(user: utils::User) -> Result<utils::User, error::TrebuchetError> {
     // TODO: check the TOKEN matches
     let connection = sqlite::Connection::open("trebuchet.db")?;
     // we need to borrow these values so we can return the user later
@@ -522,6 +524,22 @@ pub mod database {
       })
     }
   }
+
+  pub fn initiate_capsule(user: utils::User) -> Result<utils::User, error::TrebuchetError> {
+    // TODO:
+
+    // in all cases error if already exists
+
+    // initiate includes.header and includes.footer content
+    // default footer to include links to home, archive, orbit, and Trebuchet itself
+
+    // initiate index.gmi with default content (including shortcodes)
+
+    // initiate orbit.gmi for gemini capsules in my orbit (i.e. equivalent to a blogroll)
+
+    // return the User
+    Ok(user)
+  }
 }
 
 #[cfg(test)]
@@ -537,7 +555,7 @@ mod tests {
 
   #[test]
   fn utils_build_user_returns_user() {
-    let built_user = utils::build_user("hello@email.com", "capsule_name");
+    let built_user = utils::User::new("hello@email.com".to_string(), "capsule_name".to_string());
     let user_two = utils::User {
       email: "hello@email.com".to_string(),
       capsule: "capsule_name".to_string(),

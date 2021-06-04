@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use std::{io, process::Command};
-use trebuchet::utils::{build_user, EmailType, file_exists};
+use trebuchet::utils::{EmailType, file_exists, User};
 use trebuchet::database;
 use clap::{Arg, App};
 
@@ -296,14 +296,14 @@ fn main() {
   }
   if matches.is_present("capsule") {
     let args: Vec<&str> = matches.values_of("capsule").unwrap().collect();
-    match build_user(args[0], args[1]).add_user() {
+    match User::new(args[0].to_string(), args[1].to_string()).add() {
       Ok(()) => println!("✔  User {} added to database", args[0]),
       Err(err) => eprintln!("ERROR Could not build capsule: {}", err)
     }
   }
   if matches.is_present("delete") {
     let args: Vec<&str> = matches.values_of("delete").unwrap().collect();
-    // TODO: force administrator to confirm
+    // TODO: move this into a function in lib
     println!("You are about to delete the following user: {}", args[0]);
     println!("Confirm this is what you want to do by typing the user email again below:");
     let mut input_text = String::new();
@@ -315,30 +315,26 @@ fn main() {
     let is_match = trimmed.parse::<String>() == Ok(args[0].to_string());
     match is_match {
         true => {
-          match build_user(args[0], args[1]).delete_user() {
+          match User::new(args[0].to_string(), args[1].to_string()).delete() {
             Ok(()) => println!("✔  User {} deleted from database", args[0]),
             Err(err) => eprintln!("ERROR Could not delete capsule: {}", err)
           }
         },
-        false => println!("⚠️  Your text does not match the user email. Deletion aborted."),
+        false => eprintln!("⚠️  Your text does not match the user email. Deletion aborted."),
     };
   }
   if matches.is_present("user") {
     if matches.is_present("confirm") {
-      if let Err(err) = build_user(matches.value_of("user").unwrap(), "").initiate_login(EmailType::Confirm) {
+      if let Err(err) = User::new(matches.value_of("user").unwrap().to_string(), "".to_string()).initiate_login(EmailType::Confirm) {
         eprintln!("ERROR Could not resend confirmation email: {}", err)
       }
     } else if matches.is_present("login") {
-      if let Err(err) = build_user(matches.value_of("user").unwrap(), "").initiate_login(EmailType::LogIn) {
+      if let Err(err) = User::new(matches.value_of("user").unwrap().to_string(), "".to_string()).initiate_login(EmailType::LogIn) {
         eprintln!("ERROR Could not send login email: {}", err)
       }
     } else {
       // TODO: 
         println!("I am printing user details!");
-        // TESTING:
-        if let Err(err) = build_user("molly@dog.ceo", "doggie").confirm_user() {
-          eprintln!("ERROR Could not resend confirmation email: {}", err.message)
-        }
     }
   }
   if matches.is_present("statistics") {
