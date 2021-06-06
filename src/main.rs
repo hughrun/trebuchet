@@ -148,10 +148,10 @@ fn build() {
 // upsert tags with this post referenced
 // process site
 //    - ignore content listed as published FALSE
-//    - index (home) page: index list, latest post, neither?
-//    - posts index page
+//    - index (home) page
+//    - archive index page
 //    - tag index page and index page for each tag
-//    - header and footer (optionally)
+//    - header and footer on each file unless show_footer or show_header is false
 
 // ************************************************************
 //  CLI

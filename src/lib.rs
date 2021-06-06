@@ -101,6 +101,13 @@ pub mod utils {
     Ok(())
   }
 
+  pub fn hyphenate( tag: String ) -> String {
+    let mut alphanum = tag;
+    alphanum.retain(|ch: char| ch.is_ascii_alphanumeric() || ch == ' ');
+    let downcased = alphanum.to_lowercase();
+    downcased.replace(|ch: char| ch == ' ', "-")
+  }
+
   fn create_otp() -> String {
     let mut rng = thread_rng();
     let chars: String = iter::repeat(())
@@ -140,7 +147,7 @@ pub mod utils {
       Ok(())
     }
 
-    pub fn delete(self) -> Result<(), Box<(dyn std::error::Error)>>{
+    pub fn delete(self) -> Result<(), Box<(dyn std::error::Error)>> {
       
       // TODO: delete user files
 
@@ -148,6 +155,7 @@ pub mod utils {
       database::delete_user(self)?.build_email(EmailType::Delete)?;
       Ok(())
     }
+
     pub fn initiate_login(self, etype: EmailType) -> Result<(), io::Error> {
       // TODO:
       // find user in DB
@@ -160,14 +168,8 @@ pub mod utils {
       self.build_email(etype)?;
       Ok(())
     }
-
-    fn initiate_capsule(self) -> Result<User, TrebuchetError> {
-
-      // create home directory at ./content/{local.capsule}
-      
-      // this allows us to do things like if local.capsule is a domain (www.example.com), agate (or whatever) will serve from that domain
-      // or if it's just a username or something (~hugh-is-on-gemini), that's fine too and it becomes a path within the base domain
-      // error if already exists
+    // FIXME: should not be public - only for testing
+    pub fn initiate_capsule(self) -> Result<User, TrebuchetError> {
 
       // initiate default values in DB
       database::initiate_capsule(self)
@@ -246,21 +248,53 @@ pub mod utils {
 pub mod database {
   use crate::utils;
   use crate::error;
-  use std::{io::prelude::*};
-  use std::fs;
+  use chrono::{Local, Utc};
+  use std::{collections::HashMap, fmt, fs, io::prelude::*};
   use sqlite;
   
+  pub enum ContentType {
+    Draft,
+    Include,
+    Page,
+    Post
+  }
+
+  impl fmt::Display for ContentType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let c_type = match &self {
+          ContentType::Draft => "draft",
+          ContentType::Include => "include",
+          ContentType::Page => "page",
+          ContentType::Post => "post"
+        };
+
+        write!(f, "{}", c_type)
+    }
+}
+
+  pub struct Document {
+    owner: String,
+    title: String,
+    tags: Vec<String>,
+    published: String,
+    updated: String,
+    content: String,
+    header: bool,
+    footer: bool,
+    content_type: ContentType
+  }
+
   pub fn build_tables() -> Result<(), sqlite::Error>{
 
     let connection = sqlite::Connection::open("trebuchet.db")?;
 
     connection.execute(
         "
-        CREATE TABLE users (email TEXT UNIQUE, home_directory TEXT UNIQUE, confirmed INTEGER NOT NULL);
-        CREATE TABLE tokens (token TEXT PRIMARY KEY, email TEXT NOT NULL, expiry TEXT NOT NULL);
-        CREATE TABLE expired_tokens (token TEXT PRIMARY KEY, email TEXT NOT NULL, used INTEGER NOT NULL);
-        CREATE TABLE cookies (user INTEGER NOT NULL, expiry TEXT NOT NULL);
-        CREATE TABLE documents (owner INTEGER NOT NULL, content TEXT, title TEXT, tags TEXT, type TEXT NOT NULL, is_draft INTEGER, published_date TEXT DEFAULT CURRENT_TIMESTAMP, last_updated TEXT DEFAULT CURRENT_TIMESTAMP, uses_footer INTEGER, uses_header INTEGER);
+        CREATE TABLE users (email TEXT UNIQUE, home_directory TEXT UNIQUE, confirmed INTEGER);
+        CREATE TABLE tokens (token TEXT PRIMARY KEY, email TEXT, expiry TEXT);
+        CREATE TABLE expired_tokens (token TEXT PRIMARY KEY, email TEXT, used INTEGER);
+        CREATE TABLE cookies (user INTEGER, expiry TEXT);
+        CREATE TABLE documents (owner TEXT, content TEXT, title TEXT, tags TEXT, type TEXT, published_date TEXT, last_updated TEXT, uses_footer INTEGER, uses_header INTEGER, UNIQUE(owner, title));
         ",
     )?;
     Ok(())
@@ -273,8 +307,9 @@ pub mod database {
     fs::create_dir("./capsules")?;
     println!("✔   default directories created");
     // create gemini index file
-    let mut gem = fs::File::create("./capsules/index.gmi")?;
-    gem.write_all(b"# Home\n\nWelcome to my site built with Trebuchet!\n\n=> gemini://trebuchet.hugh.run Find out more about Trebuchet")?;
+    // NOTE: don't create anything in the default directory because it might be overwritten by a single default user on creation!
+    // let mut gem = fs::File::create("./capsules/index.gmi")?;
+    // gem.write_all(b"# Home\n\nWelcome to my site built with Trebuchet!\n\n=> gemini://trebuchet.hugh.run Find out more about Trebuchet")?;
 
     // create web files
     let mut html = fs::File::create("./web/index.html")?;
@@ -525,19 +560,217 @@ pub mod database {
     }
   }
 
+  fn create_document(email: &String, title: String, tags: Vec<String>, content: String, content_type: ContentType) -> Document {
+    let doc = Document {
+      owner: email.to_string(),
+      title,
+      tags,
+      published: Local::now().format("%Y-%m-%d").to_string(),
+      updated: Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+      content,
+      header: true,
+      footer: true,
+      content_type
+    };
+    doc
+  }
+
   pub fn initiate_capsule(user: utils::User) -> Result<utils::User, error::TrebuchetError> {
     // TODO:
 
     // in all cases error if already exists
 
-    // initiate includes.header and includes.footer content
+    // initiate includes.footer content
     // default footer to include links to home, archive, orbit, and Trebuchet itself
-
-    // initiate index.gmi with default content (including shortcodes)
-
+    let footer = String::from("\n-------\n{{ tags-list }}\n=> /index.gmi Home\n=> /archive Archive\n=> /orbit Other capsules in my orbit\n=> gemini://trebuchet.hugh.run Made with Trebuchet\n");
+      let footer_doc = create_document(&user.email, "includes.footer".to_string(), Vec::new(), footer, ContentType::Include);
+      save_content(footer_doc)?;
+    // initiate index.gmi with default content (including shortcode)
+    let index = String::from("# My Gemini Capsule\n\nWelcome to my Gemini capsule, published with Trebuchet.\n\n{{ latest }}\n");
+    let index_doc = create_document(&user.email, "index.gmi".to_string(), Vec::new(), index, ContentType::Include);
+    save_content(index_doc)?;
     // initiate orbit.gmi for gemini capsules in my orbit (i.e. equivalent to a blogroll)
+    let orbit = String::from("# Other Gemini capsules in my orbit\n\n=> gemini://gemini.circumlunar.space/capcom CAPCOM: an aggregator for Atom feeds of Gemini content\n=> gemini://trebuchet.hugh.run Trebuchet: a web application for publishing Gemini capsules\n");
+    let orbit_doc = create_document(&user.email, "Orbit".to_string(), Vec::new(), orbit, ContentType::Page);
+    save_content(orbit_doc)?;
 
-    // return the User
+    publish_capsule(user)
+  }
+
+  fn save_content(doc: Document) -> Result<(), error::TrebuchetError> {
+
+    let connection = sqlite::Connection::open("trebuchet.db")?;
+
+    let mut uses_footer = 0;
+    if let false = doc.footer { uses_footer = 1 };
+
+    let mut uses_header = 0;
+    if let false = doc.header { uses_header = 1 };
+
+    let statement = connection.prepare(
+      "
+      INSERT INTO documents 
+      VALUES (:owner, :content, :title, :tags, :type, :published_date, :last_update, :uses_footer, :uses_header)
+      ")?;
+    let mut cursor = statement.into_cursor();
+    cursor.bind_by_name(vec![
+      (":owner", sqlite::Value::String(doc.owner)),
+      (":content", sqlite::Value::String(doc.content)),
+      (":title", sqlite::Value::String(doc.title)), 
+      (":tags", sqlite::Value::String(doc.tags.join(":::"))), // CHECK:
+      (":type", sqlite::Value::String(doc.content_type.to_string())), 
+      (":published_date", sqlite::Value::String(doc.published)), 
+      (":last_update", sqlite::Value::String(doc.updated)), 
+      (":uses_footer", sqlite::Value::Integer(uses_footer)), 
+      (":uses_header", sqlite::Value::Integer(uses_header))
+      ])?;
+      cursor.next()?;
+
+    Ok(())
+  }
+
+  fn update_document() {
+    // TODO:
+  }
+
+  // TODO:
+  fn publish_capsule(user: utils::User) -> Result<utils::User, error::TrebuchetError> {
+
+    let connection = sqlite::Connection::open("trebuchet.db")?;
+    // get all documents belonging to this user
+    let mut cursor = connection.prepare(
+      "SELECT * FROM documents 
+       WHERE owner = :user
+       ORDER BY type ASC, published_date DESC;
+      ")?;
+    cursor.bind_by_name(":user", user.email.as_str())?;
+
+    // TODO: now we process them all
+
+    let mut footer = String::new();
+    let mut header = String::new();
+    let mut index = String::new();
+    let mut pages: HashMap<String, String> = HashMap::new();
+    let mut posts: HashMap<String, String> = HashMap::new();
+    let mut latest = String::new();
+    let mut tags: HashMap<String, Vec<String>> = HashMap::new();
+
+    while let sqlite::State::Row = cursor.next()? {
+      // get includes
+      let content = format!("{}", cursor.read::<String>(1)?); // content
+      let title = format!("{}", cursor.read::<String>(2)?); // title is always the same for includes files
+      let tags_string = format!("{}", cursor.read::<String>(3)?);
+      let c_type = format!("{}", cursor.read::<String>(4)?); // content type
+      let published = format!("{}", cursor.read::<String>(5)?); // published date
+
+      if title == String::from("includes.footer") {
+        footer.push_str(content.as_str());
+      }
+      if title == String::from("includes.header") {
+        header.push_str(content.as_str());
+      }
+      if title == String::from("index.gmi") {
+        index.push_str(content.as_str());
+      }
+      // for each page,
+      if c_type == String::from("page") {
+        // add header and footer
+        let page = format!("{}\n{}\n{}", &header, content, &footer);
+        // push to vec
+        pages.insert(utils::hyphenate(title.to_owned()), page);
+        // pages.insert(title.to_owned(), page);
+      }
+      // for each post ordered by publication date
+      if c_type == String::from("post") {
+        // add header and footer
+        let post = format!("{}\n{}\n{}", &header, content, &footer);
+        // insert to hashmap
+        // key is YYYY-MM-DD-hyphenated-title
+        let k = format!("{}-{}", published, utils::hyphenate(title.to_owned()));
+        posts.insert(k, post);
+        // if in first 10 posts ordered by date descending
+        if cursor.column_count() < 10 {
+          // append to a String to insert into {{ latest }}
+            let listing = format!("=> /{}-{} {} - {}\n", published, title, published, title);
+          latest.push_str(listing.as_str());
+        }
+      }
+
+      // get all tags and build tags_list for tag-tagname archive pages
+      let doc_tags: Vec<&str> = tags_string.split(":::").collect();
+    // NOTE 1: this seems inefficient with clones and to_owned but not sure how else to do it
+    for tagname in doc_tags {
+        if tags_string.len() > 0 {
+          // NOTE 2: this will probably be a useful pattern for {{ latest }} and {{ tag.tagname }}
+          // can it be a full util function or a closure?
+          let ot = tagname.to_owned();
+          let t = utils::hyphenate(ot); // hyphenate and ascii downcase
+          let listing;
+          if c_type == "post" {
+            listing = format!("=> /{}-{} {} - {}\n", published, utils::hyphenate(title.clone()), published, title);
+          } else {
+            listing = format!("=> /{} {}\n", utils::hyphenate(title.clone()), title);
+          }
+          match tags.get(&t) {
+            Some(entries) => {
+              let mut en = entries.clone();
+              en.push(listing.clone());
+              tags.insert(t, en)
+            }
+            None => tags.insert(t.to_owned(), vec![listing])
+          };
+        };
+      };
+    }
+
+    // NOW WRITE OUT FILES
+    // fs::create_dir_all creates home directory at ./capsules/content/{local.capsule}
+    // this allows us to do things like if local.capsule is a domain (www.example.com), agate (or whatever) will serve from that domain
+    // or if it's just a username or something (~hugh-is-on-gemini), that's fine too and it becomes a path within the base domain
+    // TAGS
+    // for each tag...
+    for (t, v) in tags {
+      let mut tagpage = String::new();
+      // for post in the vec of posts...
+      for p in v {
+        tagpage.push_str(&p)
+      }
+      // write out file at {tag-tagname}/index.gmi
+      let tag_path = format!("./capsules/content/{}/tag-{}/index.gmi", user.capsule, t);
+      // this will error if already exists, which is what we want
+      fs::create_dir_all(format!("./capsules/content/{}/tag-{}", user.capsule, t))?;
+      fs::File::create(&tag_path)?;
+      fs::write(tag_path, tagpage)?;
+    }
+
+    // TODO: {{ latest }}
+    // TODO: {{ tags-list }}
+    // TODO: add posts to archive page
+
+    // PAGES
+    // TODO: make this DRY
+    // create a file at {hyphenated-title}/index.gmi
+    for (t, c) in pages {
+      fs::create_dir_all(format!("./capsules/content/{}/{}", user.capsule, t))?;
+      let page_path = format!("./capsules/content/{}/{}/index.gmi", user.capsule, t);
+      fs::File::create(&page_path)?;
+      fs::write(page_path, c)?;
+    }
+
+    // POSTS
+    // create a file at {DATE}-hyphenated-title/index.gmi
+    for (k, content) in posts {
+      fs::create_dir_all(format!("./capsules/content/{}/{}", user.capsule, k))?;
+      let post_path = format!("./capsules/content/{}/{}/index.gmi", user.capsule, k);
+      fs::File::create(&post_path)?;
+      fs::write(post_path, content)?;
+    }
+    // INDEX
+    // create a file at index.gmi
+    // directory already exists
+    let index_path = format!("./capsules/content/{}/index.gmi", user.capsule);
+    fs::File::create(&index_path)?;
+    fs::write(index_path, index)?;
     Ok(user)
   }
 }
@@ -600,4 +833,17 @@ mod tests {
   // ===============
   // TODO: database module tests
 
+  // DANGER: this does live changes to the DB
+  #[test]
+  #[ignore]
+  fn confirmation_test() {
+    utils::User::new("molly@dog.dog".to_string(),"dogger".to_string()).add().unwrap();
+    match utils::User::new("molly@dog.dog".to_string(),"dogger".to_string()).initiate_capsule() {
+      Ok(_user) => assert!(true),
+      Err(e) => {
+        eprintln!("{}", e.message);
+        assert!(false)
+      }
+    }
+  }
 }
