@@ -140,9 +140,6 @@ pub mod utils {
     }
 
     pub fn confirm(self) -> Result<(), TrebuchetError>{
-
-      // TODO: add user files
-
       // update database and send email
       database::confirm_user(self)?.initiate_capsule()?.build_email(EmailType::Confirm)?;
       Ok(())
@@ -160,9 +157,7 @@ pub mod utils {
     pub fn initiate_login(self, etype: EmailType) -> Result<(), io::Error> {
       // TODO:
       // find user in DB
-      // set self.capsule value
-
-      // create expiry date
+      // create expiry datetime
       // add token to DB - token, email, expiry
 
       // send email
@@ -171,7 +166,6 @@ pub mod utils {
     }
     // FIXME: should not be public - only for testing
     pub fn initiate_capsule(self) -> Result<User, TrebuchetError> {
-
       // initiate default values in DB
       database::initiate_capsule(self)
     }
@@ -600,7 +594,7 @@ pub mod database {
 
     publish_capsule(user)
   }
-  // FIXME: shoudl be private, only public for testing
+  // FIXME: should be private, only public for testing
   pub fn save_content(doc: Document) -> Result<(), error::TrebuchetError> {
 
     let connection = sqlite::Connection::open("trebuchet.db")?;
@@ -675,7 +669,8 @@ pub mod database {
         header.push_str(content.as_str());
       }
       if title == String::from("index.gmi") {
-        index.push_str(content.as_str());
+        let index_full = format!("{}\n{}\n{}", &header, content, &footer);
+        index.push_str(index_full.as_str());
       }
       // for each page,
       if c_type == String::from("page") {
@@ -835,11 +830,11 @@ mod tests {
   use super::*;
   // ERROR MODULE
   // ============
-  // TODO: how do we test that TrebuchetError successfully implements sqlite::Error and io::Error?
+  // TODO how do we test that TrebuchetError successfully implements sqlite::Error and io::Error?
 
   // UTILS MODULE
   // ============
-  // TODO: database functions from utils - how do we mock them?
+  // TODO database functions from utils - how do we mock them?
 
   #[test]
   fn utils_build_user_returns_user() {
@@ -890,15 +885,14 @@ mod tests {
 
   // DANGER: this does live changes to the DB
   #[test]
-  #[ignore]
+  // #[ignore]
   fn confirmation_test() {
-    utils::User::new("molly@dog.dog".to_string(),"dogger".to_string()).add().unwrap();
-    match utils::User::new("molly@dog.dog".to_string(),"dogger".to_string()).initiate_capsule() {
-      Ok(_user) => assert!(true),
-      Err(e) => {
-        eprintln!("{}", e.message);
-        assert!(false)
-      }
+    let user = utils::User::new("molly@dog.dog".to_string(),"dogger".to_string());
+    let user2 = utils::User::new("molly@dog.dog".to_string(),"dogger".to_string());
+    user.add().unwrap();
+    match user2.confirm() {
+      Ok(()) => (),
+      Err(e) => panic!(e)
     }
   }
 
