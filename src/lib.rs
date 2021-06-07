@@ -130,7 +130,7 @@ pub mod utils {
       User { email, capsule, token: create_otp() }
     }
 
-    // TODO: should this be Box or TrebuchetError?
+    // CHECK: should this be Box or TrebuchetError?
     pub fn add(self) -> Result<(), Box<(dyn std::error::Error)>>{
 
       // add user to database and send email
@@ -216,7 +216,6 @@ pub mod utils {
       // if no match return TrebuchetError::EmailError("Email address not found")
 
       // find token in DB
-      // TESTING
       let row = User {email: "me@me.com".to_string(), capsule: "cap".to_string(), token: "123abc".to_string()};
       let token_matches = self.token == row.token;
       match token_matches {
@@ -307,9 +306,7 @@ pub mod database {
     fs::create_dir("./capsules")?;
     println!("✔   default directories created");
     // create gemini index file
-    // NOTE: don't create anything in the default directory because it might be overwritten by a single default user on creation!
-    // let mut gem = fs::File::create("./capsules/index.gmi")?;
-    // gem.write_all(b"# Home\n\nWelcome to my site built with Trebuchet!\n\n=> gemini://trebuchet.hugh.run Find out more about Trebuchet")?;
+    // NOTE: don't create anything in the default directory because it will be overwritten by a single default user on creation!
 
     // create web files
     let mut html = fs::File::create("./web/index.html")?;
@@ -576,9 +573,8 @@ pub mod database {
   }
 
   pub fn initiate_capsule(user: utils::User) -> Result<utils::User, error::TrebuchetError> {
-    // TODO:
 
-    // in all cases error if already exists
+    // BUG: in all cases this should error if already exists: this is CURRENTLY OVERRIDDEN
 
     // initiate includes.footer content
     // default footer to include links to home, archive, orbit, and Trebuchet itself
@@ -617,7 +613,7 @@ pub mod database {
       (":owner", sqlite::Value::String(doc.owner)),
       (":content", sqlite::Value::String(doc.content)),
       (":title", sqlite::Value::String(doc.title)), 
-      (":tags", sqlite::Value::String(doc.tags.join(":::"))), // CHECK:
+      (":tags", sqlite::Value::String(doc.tags.join(":::"))),
       (":type", sqlite::Value::String(doc.content_type.to_string())), 
       (":published_date", sqlite::Value::String(doc.published)), 
       (":last_update", sqlite::Value::String(doc.updated)), 
@@ -633,8 +629,11 @@ pub mod database {
     // TODO:
   }
 
-  // TODO:
   fn publish_capsule(user: utils::User) -> Result<utils::User, error::TrebuchetError> {
+
+    // NOTE: This will return a io::Error with io::ErrorKind of AlreadyExists after the first time it ever runs. 
+    // We want this error when running initiate_capsule() but don't care about it later
+    // make sure any other functions calling this ignore the AlreadyExists error
 
     let connection = sqlite::Connection::open("trebuchet.db")?;
     // get all documents belonging to this user
@@ -644,8 +643,6 @@ pub mod database {
        ORDER BY type ASC, published_date DESC;
       ")?;
     cursor.bind_by_name(":user", user.email.as_str())?;
-
-    // TODO: now we process them all
 
     let mut footer = String::new();
     let mut header = String::new();
@@ -686,7 +683,7 @@ pub mod database {
         let post = format!("{}\n{}\n{}", &header, content, &footer);
         // insert to hashmap
         // key is YYYY-MM-DD-hyphenated-title
-        let k = format!("{}-{}", published, utils::hyphenate(title.to_owned()));
+        let k = format!("{}:::{}", published, title);
         posts.insert(k, post);
         // if in first 10 posts ordered by date descending
         if cursor.column_count() < 10 {
@@ -698,10 +695,10 @@ pub mod database {
 
       // get all tags and build tags_list for tag-tagname archive pages
       let doc_tags: Vec<&str> = tags_string.split(":::").collect();
-    // NOTE 1: this seems inefficient with clones and to_owned but not sure how else to do it
-    for tagname in doc_tags {
+      // NOTE 1: this seems inefficient with clones and to_owned but not sure how else to do it
+      for tagname in doc_tags {
         if tags_string.len() > 0 {
-          // NOTE 2: this will probably be a useful pattern for {{ latest }} and {{ tag.tagname }}
+          // NOTE 2: this will probably be a useful pattern for {{ latest }} and {{ tags-list }}
           // can it be a full util function or a closure?
           let ot = tagname.to_owned();
           let t = utils::hyphenate(ot); // hyphenate and ascii downcase
@@ -727,50 +724,95 @@ pub mod database {
     // fs::create_dir_all creates home directory at ./capsules/content/{local.capsule}
     // this allows us to do things like if local.capsule is a domain (www.example.com), agate (or whatever) will serve from that domain
     // or if it's just a username or something (~hugh-is-on-gemini), that's fine too and it becomes a path within the base domain
+
     // TAGS
     // for each tag...
     for (t, v) in tags {
       let mut tagpage = String::new();
-      // for post in the vec of posts...
+      // for tag in the vec of tags...
       for p in v {
         tagpage.push_str(&p)
       }
       // write out file at {tag-tagname}/index.gmi
       let tag_path = format!("./capsules/content/{}/tag-{}/index.gmi", user.capsule, t);
       // this will error if already exists, which is what we want
-      fs::create_dir_all(format!("./capsules/content/{}/tag-{}", user.capsule, t))?;
+      let tag_dir = fs::create_dir_all(format!("./capsules/content/{}/tag-{}", user.capsule, t));
+      // if file already exists we don't really care
+      // if error is something else it will almost certainly be picked up by File::create
+      if let Err(e) = tag_dir {
+        if e.kind() == std::io::ErrorKind::AlreadyExists {
+          ()
+        }
+      }
       fs::File::create(&tag_path)?;
       fs::write(tag_path, tagpage)?;
     }
 
     // TODO: {{ latest }}
     // TODO: {{ tags-list }}
-    // TODO: add posts to archive page
+
 
     // PAGES
     // TODO: make this DRY
     // create a file at {hyphenated-title}/index.gmi
     for (t, c) in pages {
-      fs::create_dir_all(format!("./capsules/content/{}/{}", user.capsule, t))?;
+      let pages_dir = fs::create_dir_all(format!("./capsules/content/{}/{}", user.capsule, t));
+      // if file already exists we don't really care
+      // if error is something else it will almost certainly be picked up by File::create
+      if let Err(e) = pages_dir {
+        if e.kind() == std::io::ErrorKind::AlreadyExists {
+          ()
+        }
+      }
       let page_path = format!("./capsules/content/{}/{}/index.gmi", user.capsule, t);
       fs::File::create(&page_path)?;
       fs::write(page_path, c)?;
     }
 
     // POSTS
-    // create a file at {DATE}-hyphenated-title/index.gmi
+    let mut post_archive = String::new();
     for (k, content) in posts {
-      fs::create_dir_all(format!("./capsules/content/{}/{}", user.capsule, k))?;
-      let post_path = format!("./capsules/content/{}/{}/index.gmi", user.capsule, k);
+      // create posts
+      // create a file at {DATE}-hyphenated-title/index.gmi
+      // BUG: this should probably be a struct
+      let parts:Vec<&str> = k.split(":::").collect();
+      let posts_dir = fs::create_dir_all(format!("./capsules/content/{}/{}-{}", user.capsule, parts[0], parts[1]));
+      // if file already exists we don't really care
+      // if error is something else it will almost certainly be picked up by File::create
+      if let Err(e) = posts_dir {
+        if e.kind() == std::io::ErrorKind::AlreadyExists {
+          ()
+        }
+      }
+      let post_path = format!("./capsules/content/{}/{}-{}/index.gmi", user.capsule, parts[0], parts[1]);
       fs::File::create(&post_path)?;
-      fs::write(post_path, content)?;
+      fs::write(&post_path, &content)?;
+
+      // add to post archive page
+      let post_listing = format!("=> {} {}\n", post_path, parts[1]);
+      post_archive.push_str(&post_listing);
     }
+
+    // write out archive file
+    let archive_dir = fs::create_dir_all(format!("./capsules/content/{}/archive/", user.capsule));
+      // if file already exists we don't really care
+      // if error is something else it will almost certainly be picked up by File::create
+      if let Err(e) = archive_dir {
+        if e.kind() == std::io::ErrorKind::AlreadyExists {
+          ()
+        }
+      }
+    let post_archive_path = format!("./capsules/content/{}/archive/index.gmi", user.capsule);
+    fs::File::create(&post_archive_path)?;
+    fs::write(post_archive_path, post_archive)?;
+
     // INDEX
     // create a file at index.gmi
     // directory already exists
     let index_path = format!("./capsules/content/{}/index.gmi", user.capsule);
     fs::File::create(&index_path)?;
     fs::write(index_path, index)?;
+
     Ok(user)
   }
 }
@@ -835,7 +877,7 @@ mod tests {
 
   // DANGER: this does live changes to the DB
   #[test]
-  #[ignore]
+  // #[ignore]
   fn confirmation_test() {
     utils::User::new("molly@dog.dog".to_string(),"dogger".to_string()).add().unwrap();
     match utils::User::new("molly@dog.dog".to_string(),"dogger".to_string()).initiate_capsule() {
