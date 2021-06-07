@@ -102,6 +102,7 @@ pub mod utils {
   }
 
   pub fn hyphenate( tag: String ) -> String {
+    // TODO: trim dangling hyphens and reduce multiple hyphens to singular
     let mut alphanum = tag;
     alphanum.retain(|ch: char| ch.is_ascii_alphanumeric() || ch == ' ');
     let downcased = alphanum.to_lowercase();
@@ -281,6 +282,13 @@ pub mod database {
     header: bool,
     footer: bool,
     content_type: ContentType
+  }
+
+  struct PostObject {
+    title: String,
+    published: String,
+    url: String,
+    post: String
   }
 
   pub fn build_tables() -> Result<(), sqlite::Error>{
@@ -556,8 +564,8 @@ pub mod database {
       })
     }
   }
-
-  fn create_document(email: &String, title: String, tags: Vec<String>, content: String, content_type: ContentType) -> Document {
+  // FIXME: should be private, only public for testing
+  pub fn create_document(email: &String, title: String, tags: Vec<String>, content: String, content_type: ContentType) -> Document {
     let doc = Document {
       owner: email.to_string(),
       title,
@@ -592,8 +600,8 @@ pub mod database {
 
     publish_capsule(user)
   }
-
-  fn save_content(doc: Document) -> Result<(), error::TrebuchetError> {
+  // FIXME: shoudl be private, only public for testing
+  pub fn save_content(doc: Document) -> Result<(), error::TrebuchetError> {
 
     let connection = sqlite::Connection::open("trebuchet.db")?;
 
@@ -628,8 +636,8 @@ pub mod database {
   fn update_document() {
     // TODO:
   }
-
-  fn publish_capsule(user: utils::User) -> Result<utils::User, error::TrebuchetError> {
+  // FIXME: shoudl be private, only public for testing
+  pub fn publish_capsule(user: utils::User) -> Result<utils::User, error::TrebuchetError> {
 
     // NOTE: This will return a io::Error with io::ErrorKind of AlreadyExists after the first time it ever runs. 
     // We want this error when running initiate_capsule() but don't care about it later
@@ -648,7 +656,7 @@ pub mod database {
     let mut header = String::new();
     let mut index = String::new();
     let mut pages: HashMap<String, String> = HashMap::new();
-    let mut posts: HashMap<String, String> = HashMap::new();
+    let mut posts: Vec<PostObject> = Vec::new();
     let mut latest = String::new();
     let mut tags: HashMap<String, Vec<String>> = HashMap::new();
 
@@ -677,18 +685,26 @@ pub mod database {
         pages.insert(utils::hyphenate(title.to_owned()), page);
         // pages.insert(title.to_owned(), page);
       }
+
+      // CHECK: this seems like a lot of cloning...
       // for each post ordered by publication date
       if c_type == String::from("post") {
         // add header and footer
         let post = format!("{}\n{}\n{}", &header, content, &footer);
-        // insert to hashmap
-        // key is YYYY-MM-DD-hyphenated-title
-        let k = format!("{}:::{}", published, title);
-        posts.insert(k, post);
+        let url = format!("{}-{}", published, utils::hyphenate(title.clone()));
+        let listing = format!("=> /{}-{} {} - {}\n", &published, utils::hyphenate(title.clone()), &published, &title);
+        // insert to vec
+        let post_obj = PostObject {
+          title: title.clone(),
+          published: published.clone(),
+          url,
+          post
+        };
+        posts.push(post_obj);
         // if in first 10 posts ordered by date descending
         if cursor.column_count() < 10 {
           // append to a String to insert into {{ latest }}
-            let listing = format!("=> /{}-{} {} - {}\n", published, title, published, title);
+            
           latest.push_str(listing.as_str());
         }
       }
@@ -704,14 +720,14 @@ pub mod database {
           let t = utils::hyphenate(ot); // hyphenate and ascii downcase
           let listing;
           if c_type == "post" {
-            listing = format!("=> /{}-{} {} - {}\n", published, utils::hyphenate(title.clone()), published, title);
+            listing = format!("=> /{}-{} {} - {}\n", &published, utils::hyphenate(title.clone()), published, title);
           } else {
             listing = format!("=> /{} {}\n", utils::hyphenate(title.clone()), title);
           }
           match tags.get(&t) {
             Some(entries) => {
               let mut en = entries.clone();
-              en.push(listing.clone());
+              en.push(listing);
               tags.insert(t, en)
             }
             None => tags.insert(t.to_owned(), vec![listing])
@@ -771,12 +787,9 @@ pub mod database {
 
     // POSTS
     let mut post_archive = String::new();
-    for (k, content) in posts {
-      // create posts
+    for p in posts {
       // create a file at {DATE}-hyphenated-title/index.gmi
-      // BUG: this should probably be a struct
-      let parts:Vec<&str> = k.split(":::").collect();
-      let posts_dir = fs::create_dir_all(format!("./capsules/content/{}/{}-{}", user.capsule, parts[0], parts[1]));
+      let posts_dir = fs::create_dir_all(format!("./capsules/content/{}/{}", user.capsule, p.url));
       // if file already exists we don't really care
       // if error is something else it will almost certainly be picked up by File::create
       if let Err(e) = posts_dir {
@@ -784,12 +797,12 @@ pub mod database {
           ()
         }
       }
-      let post_path = format!("./capsules/content/{}/{}-{}/index.gmi", user.capsule, parts[0], parts[1]);
+      let post_path = format!("./capsules/content/{}/{}/index.gmi", user.capsule, p.url);
       fs::File::create(&post_path)?;
-      fs::write(&post_path, &content)?;
+      fs::write(&post_path, &p.post)?;
 
       // add to post archive page
-      let post_listing = format!("=> {} {}\n", post_path, parts[1]);
+      let post_listing = format!("=> /{} {} - {}\n", p.url, p.published, p.title);
       post_archive.push_str(&post_listing);
     }
 
@@ -877,7 +890,7 @@ mod tests {
 
   // DANGER: this does live changes to the DB
   #[test]
-  // #[ignore]
+  #[ignore]
   fn confirmation_test() {
     utils::User::new("molly@dog.dog".to_string(),"dogger".to_string()).add().unwrap();
     match utils::User::new("molly@dog.dog".to_string(),"dogger".to_string()).initiate_capsule() {
@@ -888,4 +901,33 @@ mod tests {
       }
     }
   }
+
+  #[test]
+  #[ignore]
+  fn publish_post() {
+    let user = utils::User {
+      email: String::from("molly@dog.dog"),
+      capsule: String::from("testing.example.wtf"),
+      token: String::from("abc123")
+    };
+    let my_page = String::from("# My sweet as post eh\n\nCheck out this cool shit\n=> gemini://gemini.circumlunar.space/capcom CAPCOM: an aggregator for Atom feeds of Gemini content\n\nWhoop whoop!\n> I'm quoting mate\n");
+    let post_doc = database::create_document(&user.email, "Test 123 🚀".to_string(), vec!["awesome".to_string(), "sweeet".to_string()], my_page, database::ContentType::Post);
+    database::save_content(post_doc).unwrap();
+    database::publish_capsule(user).unwrap();
+  }
+
+  #[test]
+  #[ignore]
+  fn publish_page() {
+    let user = utils::User {
+      email: String::from("molly@dog.dog"),
+      capsule: String::from("testing.example.wtf"),
+      token: String::from("abc123")
+    };
+    let my_page = String::from("# A page that is not a post\n\nCheck out this cool shit\n=> gemini://gemini.circumlunar.space/capcom CAPCOM: an aggregator for Atom feeds of Gemini content\n\nWhoop whoop!\n> I'm quoting mate\n");
+    let post_doc = database::create_document(&user.email, "My pAgE".to_string(), vec!["awesome".to_string(), "test".to_string()], my_page, database::ContentType::Page);
+    database::save_content(post_doc).unwrap();
+    database::publish_capsule(user).unwrap();
+  }
+
 }
